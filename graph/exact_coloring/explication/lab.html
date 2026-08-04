@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Laboratory — Coloring Large Instances</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b1517;--bg2:#0d1a1d;--panel:#102226;--panel2:#0d1e22;--ink:#e8f1ef;--muted:#9db4b0;--faint:#6e8784;
+--line:rgba(157,180,176,.16);--c0:#ffb454;--c1:#2dd4bf;--c2:#fb7185;--sky:#7dd3fc;--gold:#e9c46a;
+--disp:"Fraunces",serif;--body:"Instrument Sans",sans-serif;--mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.65;overflow-x:hidden}
+.bg-grid{position:fixed;inset:0;z-index:-3;pointer-events:none;
+ background:repeating-linear-gradient(0deg,rgba(157,180,176,.045) 0 1px,transparent 1px 44px),
+ repeating-linear-gradient(90deg,rgba(157,180,176,.045) 0 1px,transparent 1px 44px),
+ linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%)}
+.bg-glow{position:fixed;z-index:-2;border-radius:50%;filter:blur(90px);pointer-events:none}
+.g1{width:640px;height:640px;background:var(--c1);top:-220px;left:-180px;opacity:.12}
+.g2{width:720px;height:720px;background:var(--c0);bottom:-260px;right:-200px;opacity:.10}
+.g3{width:420px;height:420px;background:var(--sky);top:40%;left:60%;opacity:.06}
+.wrap{max-width:1120px;margin:0 auto;padding:0 26px}
+.masthead{padding:64px 0 40px}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:14px;margin-bottom:34px}
+.kicker::after{content:"";flex:1;height:1px;background:var(--line)}
+.kicker b{color:var(--c1);font-weight:600}
+.kicker .live{color:var(--c0)}
+.mast-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center}
+.chap-num{font-family:var(--disp);font-weight:300;font-size:15px;letter-spacing:.3em;color:var(--c0);margin-bottom:6px}
+h1{font-family:var(--disp);font-weight:600;font-size:clamp(44px,6.5vw,84px);line-height:1.0;letter-spacing:-.02em;margin-bottom:22px}
+h1 em{font-style:italic;color:var(--c1);font-weight:500}
+.lede{font-size:19px;color:var(--muted);max-width:52ch}.lede strong{color:var(--ink)}
+.stats-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.stats-card h3{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-bottom:16px}
+.stat{display:flex;align-items:baseline;gap:14px;padding:11px 0;border-bottom:1px solid var(--line)}
+.stat:last-child{border-bottom:none}
+.stat .sv{font-family:var(--disp);font-weight:600;font-size:26px;min-width:88px;color:var(--c0)}
+.stat .sl{font-size:13.5px;color:var(--muted)}
+.stat .sl b{color:var(--c1)}
+.objectif{margin-top:44px;border-left:3px solid var(--c1);background:linear-gradient(90deg,rgba(45,212,191,.07),transparent 70%);padding:22px 26px;border-radius:0 12px 12px 0}
+.objectif .tag{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--c1);font-weight:600}
+.objectif p{font-size:18px;margin-top:8px;max-width:80ch;color:var(--muted)}.objectif p b{color:var(--ink)}
+.toc{position:sticky;top:0;z-index:50;background:rgba(11,21,23,.88);backdrop-filter:blur(10px);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:46px}
+.toc .wrap{display:flex;gap:4px;overflow-x:auto;padding:12px 26px}
+.toc a{font-family:var(--mono);font-size:12px;text-decoration:none;color:var(--muted);padding:7px 13px;border-radius:999px;border:1px solid transparent;white-space:nowrap;transition:all .25s}
+.toc a b{color:var(--c0);font-weight:600;margin-right:5px}
+.toc a:hover{color:var(--ink);border-color:var(--line)}
+.toc a.active{color:var(--bg);background:var(--c1);font-weight:600}.toc a.active b{color:var(--bg)}
+section{padding:88px 0 20px;scroll-margin-top:70px}
+.sec-head{display:flex;align-items:baseline;gap:22px;margin-bottom:14px}
+.sec-num{font-family:var(--disp);font-weight:300;font-size:74px;line-height:1;color:transparent;-webkit-text-stroke:1.4px var(--c0);flex-shrink:0}
+h2{font-family:var(--disp);font-weight:600;font-size:clamp(30px,4vw,44px);letter-spacing:-.01em;line-height:1.1}
+.sec-sub{color:var(--muted);font-size:18px;max-width:76ch;margin-bottom:34px}
+p{margin-bottom:18px;max-width:80ch}p b{color:var(--c1);font-weight:600}
+.pull{font-family:var(--disp);font-style:italic;font-weight:500;font-size:clamp(22px,3vw,30px);line-height:1.4;border-left:3px solid var(--c1);padding:6px 0 6px 26px;margin:36px 0;max-width:64ch}
+.pull .hl{color:var(--c0);font-style:normal}
+.note{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:16px 20px;font-size:14.5px;color:var(--muted);margin:20px 0}
+.note b{color:var(--ink)}
+.rv{opacity:0;transform:translateY(26px);transition:opacity .8s ease,transform .8s cubic-bezier(.22,1,.36,1)}
+.rv.in{opacity:1;transform:none}
+.lab{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;margin-top:8px}
+.lab-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+.rbtn{font-family:var(--mono);font-size:14px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:10px 16px;cursor:pointer;transition:all .25s}
+.rbtn:hover{border-color:var(--c1);color:var(--c1);transform:translateY(-2px)}
+.rbtn.go{background:var(--c0);color:var(--bg);border-color:var(--c0);font-weight:600}
+.rbtn.go:hover{color:var(--bg);box-shadow:0 8px 24px rgba(255,180,84,.3)}
+#lab-n{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.lab-grid{display:grid;grid-template-columns:auto 1fr;gap:30px;align-items:start}
+table.adj{border-collapse:collapse;font-family:var(--mono);font-size:12px}
+table.adj th,table.adj td{width:26px;height:26px;text-align:center;border:1px solid var(--line);transition:background .15s}
+table.adj th{color:var(--c0);font-weight:600;background:var(--panel2)}
+table.adj td{cursor:pointer;color:var(--faint)}
+table.adj td.one{color:var(--c1);background:rgba(45,212,191,.08)}
+table.adj td.hl{background:rgba(45,212,191,.16)}
+table.adj td.diag{background:rgba(157,180,176,.05)}
+textarea#paste{width:100%;min-height:110px;background:#0a171a;border:1px solid var(--line);border-radius:9px;color:var(--muted);font-family:var(--mono);font-size:12px;padding:12px;resize:vertical}
+.lab-canvas{margin-top:26px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);padding:18px}
+.lc-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.lc-title{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--c0);font-weight:600}
+#lab-status{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+#lab-status .run{color:var(--gold)}#lab-status .done{color:var(--c1)}#lab-status .warn{color:var(--c2)}
+#conflict-badge{font-family:var(--mono);font-size:12px;padding:5px 13px;border-radius:999px;border:1px solid var(--line);color:var(--faint);transition:all .3s}
+#conflict-badge.ok{color:var(--c1);border-color:rgba(45,212,191,.5);background:rgba(45,212,191,.08)}
+#conflict-badge.ko{color:var(--c2);border-color:rgba(251,113,133,.6);background:rgba(251,113,133,.1);animation:shake .4s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+#labGraph{max-width:680px;margin:0 auto}
+#labGraph svg{width:100%;height:auto;display:block}
+#labGraph circle.v{cursor:pointer;transition:r .15s}
+.lab-row{display:flex;align-items:center;gap:16px;padding:13px 16px;border:1px solid var(--line);border-radius:10px;margin-bottom:9px;cursor:pointer;background:var(--panel2);transition:all .25s}
+.lab-row:hover{border-color:rgba(45,212,191,.45);transform:translateX(5px)}
+.lab-row.sel{border-color:var(--gold);background:rgba(233,196,106,.07);box-shadow:0 0 0 1px var(--gold)}
+.lab-row .algo{font-family:var(--disp);font-weight:600;font-size:16px;flex:1}
+.lab-row .kval{font-family:var(--mono);font-size:15px;font-weight:600}
+.lab-row .star{font-family:var(--mono);font-size:11px;color:var(--gold)}
+.lab-row .playico{font-family:var(--mono);font-size:12px;color:var(--faint)}
+footer{margin-top:100px;border-top:1px solid var(--line);padding:56px 0 70px;background:var(--bg2)}
+.foot-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:center}
+.foot-card{display:block;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:20px 22px;background:var(--panel);transition:all .3s}
+.foot-card:hover{transform:translateY(-4px);border-color:rgba(45,212,191,.45)}
+.foot-card .fc-k{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+.foot-card .fc-t{font-family:var(--disp);font-weight:600;font-size:19px;margin-top:6px;color:var(--c0)}
+.colo{font-family:var(--mono);font-size:11.5px;color:var(--faint);letter-spacing:.06em;margin-top:34px}
+@media(max-width:880px){.mast-grid,.lab-grid,.foot-grid{grid-template-columns:1fr}.sec-num{font-size:52px}}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div><div class="bg-glow g1"></div><div class="bg-glow g2"></div><div class="bg-glow g3"></div>
+
+<header class="masthead"><div class="wrap">
+  <div class="kicker">Advanced Laboratory · Experimentation Space · <b class="live">— ACTIVE CHAPTER</b></div>
+  <div class="mast-grid">
+    <div>
+      <div class="chap-num">— EXTENDED LABORATORY</div>
+      <h1>The <em>Extended</em> Laboratory</h1>
+      <p class="lede">Breaking free from the 50-vertex limit, this space confronts heuristics with <strong>large instances</strong> — and systematically verifies the <strong>validity</strong> of every coloring produced.</p>
+    </div>
+    <div class="stats-card">
+      <h3>Real-Time Generation & Evaluation</h3>
+      <div class="stat"><span class="sv">500</span><span class="sl"><b>maximum vertices</b> — matrix hidden beyond 40</span></div>
+      <div class="stat"><span class="sv">8</span><span class="sl"><b>algorithms</b> running client-side</span></div>
+      <div class="stat"><span class="sv">5 M</span><span class="sl"><b>max nodes</b> for exact backtracking</span></div>
+      <div class="stat"><span class="sv" style="color:var(--c1)">✓</span><span class="sl"><b>validity check</b> — every edge controlled, conflicts in red</span></div>
+    </div>
+  </div>
+  <div class="objectif rv">
+    <div class="tag">Objective of this laboratory</div>
+    <p>Observe how structural filters and heuristics react to the combinatorial complexity of graphs of varying sizes, measure the computational cost of necessary conditions — and <b>guarantee</b> that no displayed coloring contains a conflict.</p>
+  </div>
+</div></header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#s6"><b>1</b>Experimentation Console</a>
+  <a href="#s7"><b>2</b>Results Analysis</a>
+</div></nav>
+
+<main class="wrap">
+
+<section id="s6">
+  <div class="sec-head rv"><div class="sec-num">01</div><h2>Experimentation Console</h2></div>
+  <p class="sec-sub rv">Build your own graph or generate a random instance, then run the 8 algorithms. The interface adapts: the matrix is hidden beyond 40 vertices, the animation becomes instant beyond 100. <b>Hover a colored vertex to isolate its neighbors and check for conflicts</b> — any edge connecting two vertices of the same color is displayed in red.</p>
+
+  <div class="lab rv">
+    <div class="lab-toolbar">
+      <button class="rbtn" id="lab-minus">−</button>
+      <span id="lab-n">Vertices: 6</span>
+      <button class="rbtn" id="lab-plus">+</button>
+      <button class="rbtn" id="lab-rand">⚡ Random Graph</button>
+      <button class="rbtn" id="lab-load">Load Text</button>
+      <button class="rbtn go" id="lab-run">▶ Run the 8 algorithms</button>
+    </div>
+    <div class="lab-grid">
+      <div id="matrix-wrap"><div style="font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--c0);font-weight:600;margin-bottom:10px">Adjacency matrix</div>
+        <table class="adj" id="labmatrix"></table>
+        <p style="font-size:11.5px;color:var(--faint);margin-top:8px;font-family:var(--mono)">Click cells to toggle edges.</p></div>
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--c0);font-weight:600;margin-bottom:10px">Graph source code</div>
+        <textarea id="paste" placeholder="Paste a matrix (rows of 0/1), then click "Load Text". For large graphs, Backtracking is capped at 5 M nodes; beyond that, it reports the best lower bound rather than the exact χ."></textarea>
+        <div class="note">The 8 algorithms produce <b>by construction</b> valid colorings: each vertex receives a color absent from all its already-colored neighbors. A <b>verifier</b> nevertheless checks every edge after each execution and displays any conflict in red — validity is never assumed, it is proven.</div>
+      </div>
+    </div>
+
+    <div class="lab-canvas">
+      <div class="lc-head">
+        <span class="lc-title">Coloring Visualization</span>
+        <span id="conflict-badge">— waiting</span>
+        <span id="lab-status">Waiting — run the algorithms, then click a result.</span>
+      </div>
+      <div id="labGraph"></div>
+    </div>
+
+    <div id="lab-results" style="margin-top:22px"><p style="color:var(--faint);font-family:var(--mono);font-size:13px">Results will appear here. Click a row to visualize the coloring on the graph above.</p></div>
+  </div>
+</section>
+
+<section id="s7">
+  <div class="sec-head rv"><div class="sec-num">02</div><h2>Results Analysis</h2></div>
+  <p class="sec-sub rv">Beyond simple verification, this laboratory allows observing the degradation of the gap between heuristics and the theoretical optimum.</p>
+  <p class="rv">On large instances, the value of χ becomes unreachable by brute force. The gap between the worst greedy and the best algorithm (RLF/DSATUR) then becomes the true <b>indicator of the filter's power</b> used. The validity checker ensures that this gap is measured on <b>valid</b> colorings — an undetected conflict would skew the entire analysis.</p>
+  <div class="pull rv">A coloring is only valuable if it is <span class="hl">verified</span>: counting the colors of an invalid coloring is measuring emptiness.</div>
+</section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="foot-grid">
+    <a class="foot-card" href="rule.html"><div class="fc-k">← Previous Chapter</div><div class="fc-t">The Art of Filtering — Necessary Conditions</div></a>
+    <a class="foot-card" href="#"><div class="fc-k">Conclusion →</div><div class="fc-t">Synthesis on Algorithm Selection</div></a>
+  </div>
+  <div class="colo">Advanced Graph Coloring Laboratory · July 2026</div>
+</div></footer>
+
+<script>
+const $=s=>document.querySelector(s);
+const NS='http://www.w3.org/2000/svg';
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.1});
+document.querySelectorAll('.rv').forEach(el=>io.observe(el));
+const links=[...document.querySelectorAll('.toc a')];
+const spy=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));}),{rootMargin:'-40% 0px -55% 0px'});
+document.querySelectorAll('main section').forEach(s=>spy.observe(s));
+
+/* ===== palette WITHOUT visible collision =====
+    Golden angle spacing: two different indices always
+    give clearly distinct hues (no short modulo). */
+const BASE=['#ffb454','#2dd4bf','#fb7185','#7dd3fc','#e9c46a','#86efac','#f9a8d4','#60a5fa','#fbbf24','#a3e635','#f472b6','#38bdf8'];
+function colorFor(c){return c<BASE.length?BASE[c]:'hsl('+((c*137.508)%360).toFixed(1)+',68%,58%)';}
+function labLabel(i){return i<26?String.fromCharCode(65+i):String(i);}
+
+/* ===== SINGLE STATE: the adjacency list LM is the only source
+    of truth, used by both the drawing, the matrix AND the
+    algorithms. No desynchronization possible. ===== */
+let LN=6,LM=[[4,5],[3,5],[3,4],[1,2],[0,2],[0,1]];
+let currentCol=null,currentConflicts=0,animTimer=null,hoverActive=false;
+
+/* ===== the 8 algorithms (valid colorings by construction) ===== */
+function greedy(adj,order){const n=adj.length,col=Array(n).fill(-1),trace=[];
+  for(const v of order){const used=new Set(adj[v].filter(u=>col[u]>=0).map(u=>col[u]));let c=0;while(used.has(c))c++;col[v]=c;trace.push(v);}
+  return{col,trace};}
+function numColors(col){return col.length?Math.max(...col)+1:0;}
+function welshPowell(adj){return greedy(adj,adj.map((_,i)=>i).sort((a,b)=>adj[b].length-adj[a].length));}
+function dsatur(adj){const n=adj.length,col=Array(n).fill(-1),sat=Array.from({length:n},()=>new Set()),trace=[];
+  for(let k=0;k<n;k++){let best=-1,bs=-1,bd=-1;
+    for(let v=0;v<n;v++)if(col[v]<0){const s=sat[v].size,d=adj[v].length;if(s>bs||(s===bs&&d>bd)){best=v;bs=s;bd=d;}}
+    let c=0;while(sat[best].has(c))c++;col[best]=c;trace.push(best);
+    for(const u of adj[best])if(col[u]<0)sat[u].add(c);}
+  return{col,trace};}
+function ido(adj){const n=adj.length,col=Array(n).fill(-1),inc=Array(n).fill(0),trace=[];
+  for(let k=0;k<n;k++){let best=-1,bs=-1,bd=-1;
+    for(let v=0;v<n;v++)if(col[v]<0){const s=inc[v],d=adj[v].length;if(s>bs||(s===bs&&d>bd)){best=v;bs=s;bd=d;}}
+    const used=new Set(adj[best].filter(u=>col[u]>=0).map(u=>col[u]));let c=0;while(used.has(c))c++;col[best]=c;trace.push(best);
+    for(const u of adj[best])if(col[u]<0)inc[u]++;}
+  return{col,trace};}
+function rlf(adj){const n=adj.length,col=Array(n).fill(-1),trace=[];let c=0;
+  while(col.includes(-1)){
+    const free=()=>adj.map((_,i)=>i).filter(i=>col[i]<0);
+    const seed=free().sort((a,b)=>adj[b].filter(u=>col[u]<0).length-adj[a].filter(u=>col[u]<0).length)[0];
+    col[seed]=c;trace.push(seed);const excluded=new Set(adj[seed]);let changed=true;
+    while(changed){changed=false;
+      const opts=free().filter(i=>!excluded.has(i)&&adj[i].every(u=>col[u]!==c));
+      if(opts.length){const pick=opts.sort((a,b)=>adj[b].filter(u=>col[u]<0&&!excluded.has(u)).length-adj[a].filter(u=>col[u]<0&&!excluded.has(u)).length)[0];
+        col[pick]=c;trace.push(pick);adj[pick].forEach(u=>excluded.add(u));changed=true;}}
+    c++;}
+  return{col,trace};}
+function smallestLast(adj){const n=adj.length,removed=new Set(),order=[];
+  while(removed.size<n){let best=-1,bd=1e9;
+    for(let v=0;v<n;v++)if(!removed.has(v)){const d=adj[v].filter(u=>!removed.has(u)).length;if(d<bd){bd=d;best=v;}}
+    removed.add(best);order.push(best);}
+  return greedy(adj,order.reverse());}
+function seededRandom(seed){let s=seed;return()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;};}
+function randomGreedy(adj,k){const rnd=seededRandom(42);const n=adj.length;let best=null,bk=1e9,bt=[];
+  for(let t=0;t<k;t++){const order=adj.map((_,i)=>i);for(let i=n-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+    const r=greedy(adj,order);const c=numColors(r.col);if(c<bk){bk=c;best=r.col;bt=r.trace;}}
+  return{col:best,trace:bt};}
+function cliqueLB(adj){let best=1;const ext=(cl,cand)=>{best=Math.max(best,cl.length);
+    for(const v of cand)ext(cl.concat(v),cand.filter(u=>u>v&&adj[v].includes(u)));};
+  ext([],adj.map((_,i)=>i));return best;}
+function backtracking(adj,cap){const n=adj.length;let nodes=0,aborted=false;const lb=cliqueLB(adj);
+  function tryK(k){const col=Array(n).fill(-1);
+    function rec(v){if(aborted)return false;if(v===n)return true;nodes++;if(nodes>cap){aborted=true;return false;}
+      const used=new Set(adj[v].filter(u=>col[u]>=0).map(u=>col[u]));
+      for(let c=0;c<k;c++)if(!used.has(c)){col[v]=c;if(rec(v+1))return true;col[v]=-1;}return false;}
+    return rec(0)?col:null;}
+  if(n>60)return{col:null,trace:null,k:null,aborted:true,best:lb,skipped:true};
+  for(let k=lb;k<=n;k++){const r=tryK(k);if(aborted)return{col:null,trace:null,k:null,aborted:true,best:lb};
+    if(r)return{col:r,trace:r.map((_,i)=>i),k:numColors(r),aborted:false,best:lb};}
+  return{col:null,trace:null,k:n,aborted:false,best:lb};}
+
+/* ===== VALIDITY CHECKER =====
+    Checks EVERY edge against the actual coloring (indices, not
+    appearance). This is the guarantee that no conflict is displayed
+    without being reported. */
+function countConflicts(adj,col){let c=0;
+  for(let v=0;v<adj.length;v++)for(const u of adj[v])if(u>v&&col[v]>=0&&col[u]>=0&&col[v]===col[u])c++;
+  return c;}
+function updateBadge(){
+  const b=$('#conflict-badge');
+  if(!currentCol){b.className='';b.textContent='— waiting';return;}
+  if(currentConflicts===0){b.className='ok';b.textContent='✓ 0 conflict — valid coloring';}
+  else{b.className='ko';b.textContent='✗ '+currentConflicts+' conflict'+(currentConflicts>1?'s':'')+' detected';}
+}
+
+/* ===== graph rendering ===== */
+function circlePos(n,W,H){const cx=W/2,cy=H/2,r=Math.min(W,H)/2-30;const p=[];
+  for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n;p.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);}return p;}
+function renderGraph(){
+  const W=680,H=560,pos=circlePos(LN,W,H);
+  const nr=LN>200?4:LN>100?5:LN>50?7:9;
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  const edgeEls=[];
+  for(let i=0;i<LN;i++)for(const j of LM[i])if(i<j){
+    const l=document.createElementNS(NS,'line');
+    l.setAttribute('x1',pos[i][0]);l.setAttribute('y1',pos[i][1]);l.setAttribute('x2',pos[j][0]);l.setAttribute('y2',pos[j][1]);
+    l.setAttribute('stroke','rgba(157,180,176,.22)');l.setAttribute('stroke-width','1');
+    svg.appendChild(l);edgeEls.push({el:l,a:i,b:j});}
+  const nodeEls=[];
+  for(let v=0;v<LN;v++){
+    const c=document.createElementNS(NS,'circle');c.setAttribute('class','v');
+    c.setAttribute('cx',pos[v][0]);c.setAttribute('cy',pos[v][1]);c.setAttribute('r',nr);
+    c.setAttribute('fill',currentCol&&currentCol[v]>=0?colorFor(currentCol[v]):'#1a2f33');
+    c.setAttribute('stroke',currentCol&&currentCol[v]>=0?'#0b1517':'#31494d');c.setAttribute('stroke-width','2');
+    svg.appendChild(c);nodeEls.push(c);}
+  $('#labGraph').innerHTML='';$('#labGraph').appendChild(svg);
+  /* conflicting edges = same actual color on both endpoints */
+  function paintConflicts(){if(!currentCol)return;
+    edgeEls.forEach(e=>{const bad=currentCol[e.a]>=0&&currentCol[e.b]>=0&&currentCol[e.a]===currentCol[e.b];
+      e.el.setAttribute('stroke',bad?'#fb7185':'rgba(157,180,176,.22)');
+      e.el.setAttribute('stroke-width',bad?'2.5':'1');});}
+  paintConflicts();
+  /* hover: isolate neighbors + reveal conflicts */
+  nodeEls.forEach((el,v)=>{
+    el.addEventListener('mouseenter',()=>{hoverActive=true;const nb=new Set(LM[v]);
+      nodeEls.forEach((c,u)=>{c.style.opacity=(u===v||nb.has(u))?1:.15;});
+      edgeEls.forEach(e=>{const touch=(e.a===v||e.b===v);
+        const bad=currentCol&&currentCol[e.a]>=0&&currentCol[e.b]>=0&&currentCol[e.a]===currentCol[e.b];
+        e.el.setAttribute('stroke',bad?'#fb7185':(touch?'#2dd4bf':'rgba(157,180,176,.06)'));
+        e.el.setAttribute('stroke-width',bad?'3':(touch?'2':'1'));});});
+    el.addEventListener('mouseleave',()=>{hoverActive=false;
+      nodeEls.forEach(c=>c.style.opacity=1);paintConflicts();});});
+  return{nodeEls,pos};
+}
+
+/* ===== animation (UNIQUE timer, always cancelled first) ===== */
+function cancelAnim(){if(animTimer){clearInterval(animTimer);animTimer=null;}}
+let view=null;
+function animateColoring(res,exact){
+  if(!view)return;
+  cancelAnim();
+  currentCol=null;currentConflicts=0;updateBadge();
+  view=renderGraph(); /* start from an uncolored graph, synced with LM */
+  const st=$('#lab-status');
+  const instant=LN>100;
+  const delay=instant?0:Math.max(40,Math.min(300,Math.round(1800/LN)));
+  let i=0;
+  const apply=v=>{currentCol=res.col; /* the final array is the source */
+    view.nodeEls[v].setAttribute('fill',colorFor(res.col[v]));
+    view.nodeEls[v].setAttribute('stroke','#0b1517');};
+  if(instant){
+    for(let v=0;v<LN;v++)apply(v);
+    currentCol=res.col;currentConflicts=countConflicts(LM,res.col);view=renderGraph();updateBadge();
+    st.innerHTML='<span class="done">✓ '+res.name+'</span> — '+numColors(res.col)+' color'+(numColors(res.col)>1?'s':'')+(exact!==null?(numColors(res.col)===exact?' (= χ ✓)':' (> χ ✗)'):'');
+    return;}
+  st.innerHTML='<span class="run">▶ '+res.name+'</span> — coloring in progress… (0/'+LN+')';
+  animTimer=setInterval(()=>{
+    if(i>=res.trace.length){cancelAnim();
+      currentCol=res.col;currentConflicts=countConflicts(LM,res.col);view=renderGraph();updateBadge();
+      const k=numColors(res.col);
+      st.innerHTML='<span class="done">✓ '+res.name+'</span> — '+k+' color'+(k>1?'s':'')+(exact!==null?(k===exact?' (= χ ✓)':' (> χ ✗)'):'')+' · '+(currentConflicts===0?'valid':'⚠ '+currentConflicts+' conflicts');
+      return;}
+    apply(res.trace[i]);i++;
+    st.innerHTML='<span class="run">▶ '+res.name+'</span> — coloring in progress… ('+i+'/'+LN+')';
+  },delay||1);
+}
+
+/* ===== matrix (hidden beyond 40) ===== */
+function renderLabMatrix(){
+  if(LN>40){$('#matrix-wrap').innerHTML='<div class="note">Matrix hidden beyond 40 vertices ('+LN+' currently) to preserve fluidity. The graph remains fully editable via the source code.</div>';return;}
+  let h='<tr><th></th>';for(let j=0;j<LN;j++)h+='<th>'+labLabel(j)+'</th>';h+='</tr>';
+  for(let i=0;i<LN;i++){h+='<tr><th>'+labLabel(i)+'</th>';
+    for(let j=0;j<LN;j++){const v=LM[i].includes(j)?1:0;h+='<td class="'+(i===j?'diag':(v?'one':''))+'" data-i="'+i+'" data-j="'+j+'">'+v+'</td>';}h+='</tr>';}
+  const t=$('#labmatrix');t.innerHTML=h;
+  t.querySelectorAll('td').forEach(td=>{
+    td.addEventListener('mouseenter',()=>{const i=+td.dataset.i,j=+td.dataset.j;t.querySelectorAll('td').forEach(c=>c.classList.toggle('hl',+c.dataset.i===i||+c.dataset.j===j));});
+    td.addEventListener('mouseleave',()=>{t.querySelectorAll('td').forEach(c=>c.classList.remove('hl'));});
+    td.addEventListener('click',()=>{const i=+td.dataset.i,j=+td.dataset.j;if(i===j)return;
+      const has=LM[i].includes(j);
+      if(has){LM[i]=LM[i].filter(x=>x!==j);LM[j]=LM[j].filter(x=>x!==i);}
+      else{LM[i].push(j);LM[j].push(i);}
+      onGraphChanged();});});
+}
+function onGraphChanged(){
+  cancelAnim();currentCol=null;currentConflicts=0;updateBadge();
+  $('#lab-n').textContent='Vertices: '+LN;
+  renderLabMatrix();view=renderGraph();
+  $('#lab-status').innerHTML='Waiting — run the algorithms, then click a result.';
+  $('#lab-results').innerHTML='<p style="color:var(--faint);font-family:var(--mono);font-size:13px">Graph modified. Click "Run the 8 algorithms".</p>';
+}
+
+/* ===== controls ===== */
+$('#lab-minus').onclick=()=>{if(LN>2){LN--;LM=LM.slice(0,LN).map(r=>r.filter(x=>x<LN));onGraphChanged();}};
+$('#lab-plus').onclick=()=>{if(LN<500){LN++;LM.push([]);onGraphChanged();}};
+$('#lab-rand').onclick=()=>{
+  const n=LN;const avgDeg=6+Math.random()*14;const p=Math.min(.4,avgDeg/(n-1));
+  LM=Array.from({length:n},()=>[]);
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)if(Math.random()<p){LM[i].push(j);LM[j].push(i);}
+  onGraphChanged();};
+$('#lab-load').onclick=()=>{
+  const lines=$('#paste').value.trim().split(/\n+/).map(l=>l.trim().replace(/[^01]/g,'')).filter(l=>l.length);
+  if(!lines.length)return;const n=Math.min(500,lines.length);
+  LM=lines.slice(0,n).map(l=>{const r=[];for(let j=0;j<n;j++)if(l[j]==='1')r.push(j);return r;});
+  LN=n;LM=LM.map(r=>r.filter(x=>x<LN));onGraphChanged();};
+
+/* ===== launch ===== */
+let lastResults=null,lastExact=null;
+$('#lab-run').onclick=()=>{
+  cancelAnim();
+  const adj=LM;
+  const res=[
+    {name:'Greedy (natural order)',...greedy(adj,adj.map((_,i)=>i))},
+    {name:'Random Greedy (×10)',...randomGreedy(adj,10)},
+    {name:'Welsh–Powell',...welshPowell(adj)},
+    {name:'DSATUR',...dsatur(adj)},
+    {name:'IDO',...ido(adj)},
+    {name:'RLF',...rlf(adj)},
+    {name:'Smallest Degree Last',...smallestLast(adj)},
+  ];
+  const bt=backtracking(adj,5000000);
+  lastExact=bt.aborted?null:bt.k;
+  if(bt.col)res.push({name:'Backtracking (exact)',col:bt.col,trace:bt.trace});
+  lastResults=res;
+  let h='<p style="font-family:var(--mono);font-size:13px;color:var(--c0);margin-bottom:14px">'+
+    (bt.skipped?('n > 60: exact χ not computed — lower bound (clique) = '+bt.best)
+      :bt.aborted?('Backtracking capped at 5 M nodes — best lower bound: '+bt.best+' (χ not proven)')
+      :('Exact χ (backtracking) = '+bt.k))+'</p>';
+  res.forEach((r,i)=>{
+    const k=numColors(r.col);const conf=countConflicts(adj,r.col);
+    const hit=(lastExact!==null&&k===lastExact);
+    h+='<div class="lab-row" data-i="'+i+'"><span class="playico">▶</span><span class="algo">'+r.name+'</span>'+
+       (conf>0?'<span class="kval" style="color:var(--c2)">⚠ '+conf+' conflicts</span>':'')+
+       '<span class="kval" style="color:'+(hit?'var(--c1)':'var(--c2)')+'">'+k+' color'+(k>1?'s':'')+(hit?' ✓':'')+'</span>'+
+       (hit?'<span class="star">= χ</span>':'')+'</div>';});
+  $('#lab-results').innerHTML=h;
+  $('#lab-results').querySelectorAll('.lab-row').forEach(row=>row.onclick=()=>{
+    $('#lab-results').querySelectorAll('.lab-row').forEach(r=>r.classList.remove('sel'));
+    row.classList.add('sel');
+    animateColoring(lastResults[+row.dataset.i],lastExact);});
+  if(res.length){$('#lab-results').querySelector('.lab-row').classList.add('sel');animateColoring(res[0],lastExact);}
+};
+
+/* ===== init ===== */
+$('#lab-n').textContent='Vertices: '+LN;
+renderLabMatrix();view=renderGraph();
+</script>
+</body>
+</html>
