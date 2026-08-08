@@ -611,7 +611,7 @@ if __name__ == "__main__":
     #   hypercube    → d: dimension (2^d vertices, χ = 2)
     #   mycielski    → k: index (M_k has χ = k, triangle-free; M_2 = K_2, M_3 = C_5)
     PARAMS = {
-        "random":       {"n": 60, "p": 0.05},   #p means edge probability or  you can choose t il manully by replacing p with m the exact number of edges
+        "random":       {"n": 50, "p": 0.6},   #p means edge probability or  you can choose t il manully by replacing p with m the exact number of edges
         "bipartite":    {"u": 5, "v": 5, "p": 0.5},
         "complete":     {"n": 8},
         "multipartite": {"group_sizes": [2, 2, 2]},
@@ -636,7 +636,7 @@ if __name__ == "__main__":
         ("sa",                   "Simulated Annealing",  lambda g: sa_coloring(g, max_iter=20000)),
         ("hea",                  "Hybrid Evolutionary",  lambda g: hea_coloring(g, pop_size=10, max_generations=50, ls_iter=1000)),
         ("tabu",                 "Tabucol",              lambda g: tabucol_coloring(g, max_iter=1000)),
-        # ("backtracking",         "Backtracking (exact)", lambda g: backtrack_coloring(g)),
+        ("backtracking",         "Backtracking (exact)", lambda g: backtrack_coloring(g)),
     ]
     NAMES = {a: n for a, n, _ in ALGORITHMS}
 

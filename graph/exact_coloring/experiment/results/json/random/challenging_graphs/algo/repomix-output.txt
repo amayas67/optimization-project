@@ -1,0 +1,5457 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+__init__.py
+backtrack.py
+common.py
+cpsat.py
+dsatur.py
+greedy.py
+hea.py
+ido.py
+npx.sh
+random_greedy.py
+repomix-output.txt
+rlf.py
+sa.py
+sat.py
+smallest_degree_last.py
+tabu.py
+welsh_powell.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="__init__.py">
+"""
+algo — Graph coloring algorithms package.
+
+Each module exposes a coloring function with the signature::
+
+    coloring_function(adj_matrix, ...) -> (colors, nb_colors)
+
+where ``adj_matrix`` is a symmetric n×n adjacency matrix (list of lists)
+with a zero diagonal, ``colors`` is the list of color to color assignments (length n)
+and ``nb_colors`` is the number of distinct colors used.
+"""
+
+# Core algorithms (always available)
+from .dsatur import dsatur_coloring
+from .greedy import greedy_coloring
+from .ido import ido_coloring
+from .random_greedy import best_random_greedy_coloring, random_greedy_coloring
+from .rlf import rlf_coloring
+from .sa import sa_coloring
+from .smallest_degree_last import smallest_degree_last_coloring
+from .tabu import tabucol_coloring
+from .welsh_powell import welsh_powell_coloring
+
+# Optional algorithms (may require extra dependencies)
+try:
+    from .backtrack import backtrack_coloring
+except ImportError:
+    backtrack_coloring = None
+
+try:
+    from .cpsat import cpsat_coloring
+except ImportError:
+    cpsat_coloring = None
+
+try:
+    from .hea import hea_coloring
+except ImportError:
+    hea_coloring = None
+
+try:
+    from .sat import sat_coloring
+except ImportError:
+    sat_coloring = None
+
+__all__ = [
+    "dsatur_coloring",
+    "greedy_coloring",
+    "ido_coloring",
+    "best_random_greedy_coloring",
+    "random_greedy_coloring",
+    "rlf_coloring",
+    "sa_coloring",
+    "smallest_degree_last_coloring",
+    "tabucol_coloring",
+    "welsh_powell_coloring",
+]
+
+# Add optional algorithms to __all__ if available
+if backtrack_coloring is not None:
+    __all__.append("backtrack_coloring")
+
+if cpsat_coloring is not None:
+    __all__.append("cpsat_coloring")
+
+if hea_coloring is not None:
+    __all__.append("hea_coloring")
+
+if sat_coloring is not None:
+    __all__.append("sat_coloring")
+</file>
+
+<file path="backtrack.py">
+#!/usr/bin/env python3
+
+def backtrack_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the backtracking algorithm (exact).
+
+    Explores all possible color assignments via backtracking
+    to find the optimal chromatic number (minimum number of colors).
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex (optimal coloring).
+    nb_colors : int
+        Chromatic number (minimum number of colors used).
+    """
+    n = len(adj_matrix)
+    best_colors = None
+    best_nb = n + 1
+
+    # Welsh-Powell order: sort vertices by decreasing degree
+    # vertices with highest degree are processed first to increase chances of finding the optimal solution quickly
+    degrees = [sum(row) for row in adj_matrix]
+    order = sorted(range(n), key=lambda i: degrees[i], reverse=True)
+
+    # Precompute neighbors for each vertex
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+
+    def is_safe(u, c, current_colors):
+        # for each neighbor v of u, if v has color c, then u cannot have color c
+        for v in neighbors[u]:
+            if current_colors[v] == c:
+                return False
+        return True
+
+    def backtrack(idx, current_colors, max_color):
+        nonlocal best_colors, best_nb
+
+        # Current number of colors = max_color + 1
+        if max_color + 1 >= best_nb:
+            return
+
+        if idx == n:
+            best_colors = current_colors[:]
+            best_nb = max_color + 1
+            return
+
+        u = order[idx]
+
+        for c in range(max_color + 1):
+            if is_safe(u, c, current_colors):
+                current_colors[u] = c
+                backtrack(idx + 1, current_colors, max_color)
+                current_colors[u] = -1
+
+        # Try a new color
+        if max_color + 1 < best_nb:
+            current_colors[u] = max_color + 1
+            backtrack(idx + 1, current_colors, max_color + 1)
+            current_colors[u] = -1
+
+    current_colors = [-1] * n
+    backtrack(0, current_colors, -1)
+
+    return best_colors, best_nb
+</file>
+
+<file path="common.py">
+#!/usr/bin/env python3
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+def _adj_list_to_matrix(adj_list):
+    n = len(adj_list)
+    adj_matrix = [[0] * n for _ in range(n)]
+    for u in range(n):
+        for v in adj_list[u]:
+            adj_matrix[u][v] = 1
+    return adj_matrix
+
+def _greedy_coloring(adj_list):
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+def _verify_coloring(adj_matrix, colors):
+    n = len(adj_matrix)
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v] and colors[u] == colors[v]:
+                return False
+    return True
+</file>
+
+<file path="cpsat.py">
+#!/usr/bin/env python3
+"""
+Google OR-Tools CP-SAT solver for Graph Coloring.
+Uses the CP-SAT (Constraint Programming) solver from OR-Tools.
+"""
+
+from ortools.sat.python import cp_model
+
+
+def cpsat_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using OR-Tools CP-SAT solver.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds (default: 60).
+    seed : int, optional
+        Random seed for reproducibility.
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = cp_model.CpModel()
+    rng = cp_model.LinearExpr
+    solver = cp_model.CpSolver()
+    
+    solver.parameters.max_time_in_seconds = time_limit
+    if seed is not None:
+        solver.parameters.random_seed = seed
+
+    edges = []
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    best_k = None
+    best_colors = None
+
+    # Start with greedy upper bound
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+    
+    for k in range(1, greedy_k + 1):
+        colors = [model.NewIntVar(0, k - 1, f'c_{i}') for i in range(n)]
+
+        for u, v in edges:
+            model.Add(colors[u] != colors[v])
+
+        solver.parameters.max_time_in_seconds = min(time_limit, time_limit / k)
+
+        status = solver.Solve(model)
+
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            solution = [solver.Value(colors[i]) for i in range(n)]
+            if best_k is None or k < best_k:
+                best_k = k
+                best_colors = solution
+                if status == cp_model.OPTIMAL:
+                    break
+        model = cp_model.CpModel()
+
+    if best_colors is None:
+        best_colors = [0] * n
+        best_k = 1
+
+    return best_colors, best_k
+
+
+def cpsat_coloring_fixed_k(adj_matrix, k, time_limit=60, seed=None, verbose=False):
+    """
+    CP-SAT variant that tries to find a valid coloring with a fixed number of colors k.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = cp_model.CpModel()
+    solver = cp_model.CpSolver()
+    
+    if seed is not None:
+        solver.parameters.random_seed = seed
+    solver.parameters.max_time_in_seconds = time_limit
+
+    colors = [model.NewIntVar(0, k - 1, f'c_{i}') for i in range(n)]
+
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                model.Add(colors[u] != colors[v])
+
+    status = solver.Solve(model)
+
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        solution = [solver.Value(colors[i]) for i in range(n)]
+        return solution, k
+    else:
+        from .common import _greedy_coloring, _matrix_to_adj_list
+        adj_list = _matrix_to_adj_list(adj_matrix)
+        _, greedy_k = _greedy_coloring(adj_list)
+        return [0] * n, greedy_k
+</file>
+
+<file path="dsatur.py">
+#!/usr/bin/env python3
+
+def dsatur_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the DSATUR algorithm.
+
+    DSATUR (Degree of Saturation) is a greedy coloring algorithm
+    that at each step selects the uncolored vertex with the highest
+    saturation degree (number of different colors already used
+    among its neighbors). In case of ties, the vertex with the
+    highest total degree is chosen.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    deg = [sum(row) for row in adj_matrix]
+    satur = [0] * n
+    # Colors used by neighbors of each vertex (as sets)
+    neighbor_colors = [set() for _ in range(n)]
+
+    # Precompute neighbors
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+
+    # Set of uncolored vertices (sorted by (saturation, degree) at each iteration)
+    uncolored = set(range(n))
+
+    for _ in range(n):
+        # Choose the vertex with the highest saturation, and in case of tie the highest degree
+        u = max(uncolored, key=lambda v: (satur[v], deg[v]))
+
+        # Find the smallest color not used by neighbors
+        used = neighbor_colors[u]
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+        uncolored.remove(u)
+
+        # Update the saturation of uncolored neighbors
+        for v in neighbors[u]:
+            if colors[v] == -1:
+                neighbor_colors[v].add(c)
+                satur[v] = len(neighbor_colors[v])
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="greedy.py">
+#!/usr/bin/env python3
+
+def greedy_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the greedy algorithm.
+
+    Traverses the vertices in increasing order (0, 1, ..., n-1) and assigns
+    to each vertex the smallest color (positive integer) that is not used by
+    its already colored neighbors.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    colors = [-1] * n
+
+    for u in range(n):
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1 if colors else 0
+
+    return colors, nb_colors
+</file>
+
+<file path="hea.py">
+#!/usr/bin/env python3
+"""
+Hybrid Evolutionary Algorithm (HEA) for Graph Coloring.
+Basé sur Galinier & Hao (1999). Combine Algorithme Génétique (GPX) et Tabu Search.
+"""
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _tabu_search_local(adj_list, k, colors, max_iter, rng):
+    """
+    Recherche Tabou pour raffiner une coloration (individu).
+    Version intégrée pour le HEA.
+    """
+    n = len(adj_list)
+    
+    # Initialisation de gamma
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2
+
+    if total_conflicts == 0:
+        return colors, 0
+
+    tabu = [[0] * k for _ in range(n)]
+
+    for iteration in range(1, max_iter + 1):
+        if not conflicts_set:
+            break
+
+        best_move = None
+        best_gain = -float('inf')
+
+        for u in conflicts_set:
+            old_c = colors[u]
+            for new_c in range(k):
+                if new_c == old_c:
+                    continue
+                gain = gamma[u][old_c] - gamma[u][new_c]
+                is_tabu = tabu[u][new_c] > iteration
+                if is_tabu and (total_conflicts - gain) >= total_conflicts:
+                    continue
+                if gain > best_gain:
+                    best_gain = gain
+                    best_move = (u, new_c, old_c)
+
+        if best_move is None:
+            if k <= 1:
+                break
+            u = rng.choice(list(conflicts_set))
+            old_c = colors[u]
+            available = [c for c in range(k) if c != old_c]
+            if not available:
+                break
+            new_c = rng.choice(available)
+            best_gain = gamma[u][old_c] - gamma[u][new_c]
+            best_move = (u, new_c, old_c)
+
+        u, new_c, old_c = best_move
+        colors[u] = new_c
+        total_conflicts -= best_gain
+
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            if gamma[v][colors[v]] == 0: conflicts_set.discard(v)
+            else: conflicts_set.add(v)
+
+        if gamma[u][new_c] == 0: conflicts_set.discard(u)
+        else: conflicts_set.add(u)
+
+        tenure = int(0.6 * len(conflicts_set)) + rng.randint(0, 9)
+        tabu[u][old_c] = iteration + tenure
+
+    return colors, total_conflicts
+
+
+def _gpx_crossover(parent1, parent2, k, rng):
+    """
+    Greedy Partition Crossover (GPX).
+    Construit un enfant en assemblant les meilleures classes de couleur des parents.
+    """
+    n = len(parent1)
+    child = [-1] * n
+    
+    # Transformer les parents en listes d'ensembles (les classes de couleur)
+    p1_classes = [set() for _ in range(k)]
+    p2_classes = [set() for _ in range(k)]
+    for i in range(n):
+        p1_classes[parent1[i]].add(i)
+        p2_classes[parent2[i]].add(i)
+
+    for c in range(k):
+        # Choisir alternativement le parent 1 et le parent 2
+        if c % 2 == 0:
+            source_classes = p1_classes
+            target_classes = p2_classes
+        else:
+            source_classes = p2_classes
+            target_classes = p1_classes
+
+        # Trouver la plus grande classe de couleur disponible
+        max_size = -1
+        best_class_idx = -1
+        for i in range(k):
+            if len(source_classes[i]) > max_size:
+                max_size = len(source_classes[i])
+                best_class_idx = i
+
+        # Assigner cette classe à l'enfant
+        chosen_vertices = source_classes[best_class_idx]
+        for v in chosen_vertices:
+            child[v] = c
+
+        # Retirer ces sommets de l'autre parent pour garder la cohérence
+        for i in range(k):
+            target_classes[i].difference_update(chosen_vertices)
+            
+        # Vider la classe utilisée
+        source_classes[best_class_idx].clear()
+
+    # Les sommets restants (orphelins) prennent une couleur aléatoire
+    for i in range(n):
+        if child[i] == -1:
+            child[i] = rng.randrange(k)
+
+    return child
+
+
+def _hea_search(adj_list, k, pop_size, max_generations, ls_iter, rng, verbose=False):
+    """
+    Cœur de l'Algorithme Évolutif Hybride.
+    """
+    n = len(adj_list)
+    
+    # 1. Initialisation de la population
+    population = []
+    for _ in range(pop_size):
+        colors = [rng.randrange(k) for _ in range(n)]
+        colors, conflicts = _tabu_search_local(adj_list, k, colors, ls_iter, rng)
+        population.append((colors, conflicts))
+        if conflicts == 0:
+            return colors, 0
+
+    # 2. Boucle Évolutive
+    for gen in range(max_generations):
+        # Sélection par tournoi binaire (2 parents)
+        p1_idx = rng.randrange(pop_size)
+        p2_idx = rng.randrange(pop_size)
+        while p2_idx == p1_idx and pop_size > 1:
+            p2_idx = rng.randrange(pop_size)
+            
+        parent1 = population[p1_idx][0]
+        parent2 = population[p2_idx][0]
+
+        # 3. Crossover (GPX)
+        child_colors = _gpx_crossover(parent1, parent2, k, rng)
+
+        # 4. Recherche Locale (Mutation/optimisation par Tabucol)
+        child_colors, child_conflicts = _tabu_search_local(adj_list, k, child_colors, ls_iter, rng)
+
+        if child_conflicts == 0:
+            if verbose: print(f"  HEA: Solution parfaite trouvée à la génération {gen+1}")
+            return child_colors, 0
+
+        # 5. Remplacement (Stratégie de distance génétique)
+        # Remplacer le parent auquel l'enfant ressemble le plus, si l'enfant est meilleur.
+        # On mesure la ressemblance par le nombre de couleurs identiques.
+        dist_p1 = sum(1 for i in range(n) if child_colors[i] == parent1[i])
+        dist_p2 = sum(1 for i in range(n) if child_colors[i] == parent2[i])
+        
+        replace_idx = p1_idx if dist_p1 > dist_p2 else p2_idx
+        
+        if child_conflicts < population[replace_idx][1]:
+            population[replace_idx] = (child_colors, child_conflicts)
+            
+        if verbose and gen % 10 == 0:
+            best_conf = min(c for _, c in population)
+            print(f"  HEA: Gen {gen} | Best Conflicts: {best_conf}")
+
+    # Retourner le meilleur individu trouvé
+    best_idx = min(range(pop_size), key=lambda i: population[i][1])
+    return population[best_idx]
+
+
+def hea_coloring(adj_matrix, pop_size=10, max_generations=50, ls_iter=1000, 
+                 seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using a Hybrid Evolutionary Algorithm.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if verbose:
+        print(f"  HEA: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  HEA: trying k = {current_k}")
+
+        colors, conflicts = _hea_search(adj_list, current_k, pop_size, 
+                                        max_generations, ls_iter, rng, verbose)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  HEA: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  HEA: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def hea_coloring_fixed_k(adj_list, k, pop_size=10, max_generations=50, ls_iter=1000, 
+                         seed=None, verbose=False):
+    """
+    HEA variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _hea_search(adj_list, k, pop_size, max_generations, ls_iter, rng, verbose)
+</file>
+
+<file path="ido.py">
+#!/usr/bin/env python3
+
+def ido_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Incidence Degree Ordering (IDO) algorithm.
+
+    At each step, selects the uncolored vertex with the highest
+    incidence degree (number of colored neighbors — not distinct colors,
+    but the raw count of neighbors that have already been assigned a color).
+    In case of a tie, the highest total degree.
+
+    This differs from DSATUR, which uses the saturation degree (the number
+    of *distinct* colors among neighbors). IDO counts *how many* neighbors
+    are colored, regardless of how many distinct colors they use.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    deg = [sum(row) for row in adj_matrix]
+    # Incidence degree = number of colored neighbors (raw count, not distinct colors)
+    incidence = [0] * n
+    # Colors used by neighbors of each vertex (for assigning the smallest available color)
+    neighbor_colors = [set() for _ in range(n)]
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+    uncolored = set(range(n))
+
+    for _ in range(n):
+        # Incidence degree = number of colored neighbors (not distinct colors)
+        best = max(uncolored, key=lambda v: (incidence[v], deg[v]))
+
+        # Find the smallest color not used by neighbors
+        used = neighbor_colors[best]
+        c = 0
+        while c in used:
+            c += 1
+        colors[best] = c
+        uncolored.discard(best)
+
+        # Update the incidence degree of uncolored neighbors
+        for v in neighbors[best]:
+            if colors[v] == -1:
+                incidence[v] += 1
+                neighbor_colors[v].add(c)
+
+    nb_colors = max(colors) + 1
+    return colors, nb_colors
+</file>
+
+<file path="npx.sh">
+#!/bin/bash
+cd "$(dirname "$0")" || exit 1
+npx repomix
+</file>
+
+<file path="random_greedy.py">
+#!/usr/bin/env python3
+
+import random
+
+
+def random_greedy_coloring(adj_matrix, seed=None):
+    """
+    Colors the vertices of a graph using a greedy coloring on a
+    random order of vertices.
+
+    The order of vertices is randomly shuffled before applying the
+    standard greedy coloring. The random order can be reproduced
+    by setting the seed.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    seed : int, optional
+        Seed for the random generator (reproducibility). Default: None.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    if seed is not None:
+        random.seed(seed)
+
+    order = list(range(n))
+    random.shuffle(order)
+
+    colors = [-1] * n
+
+    for u in order:
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+
+
+def best_random_greedy_coloring(adj_matrix, trials=10, seed=None):
+    """
+    Runs multiple trials of random_greedy_coloring and returns the
+    best coloring found (the one with the fewest colors).
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    trials : int, optional
+        Number of random trials. Default: 10.
+    seed : int, optional
+        Base seed for the trials (each trial uses seed + i).
+
+    Returns
+    -------
+    colors : list[int]
+        Best coloring found.
+    nb_colors : int
+        Corresponding number of colors.
+    """
+    best_colors = None
+    best_nb = float('inf')
+
+    for i in range(trials):
+        s = seed + i if seed is not None else None
+        colors, nb = random_greedy_coloring(adj_matrix, seed=s)
+        if nb < best_nb:
+            best_colors = colors
+            best_nb = nb
+            if best_nb == 0:
+                break
+
+    return best_colors, best_nb
+</file>
+
+<file path="repomix-output.txt">
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+__init__.py
+backtrack.py
+common.py
+cpsat.py
+dsatur.py
+greedy.py
+hea.py
+ido.py
+npx.sh
+random_greedy.py
+repomix-output.txt
+rlf.py
+sa.py
+sat.py
+scip.py
+smallest_degree_last.py
+tabu.py
+welsh_powell.py
+z3_solver.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="__init__.py">
+"""
+algo — Graph coloring algorithms package.
+
+Each module exposes a coloring function with the signature::
+
+    coloring_function(adj_matrix, ...) -> (colors, nb_colors)
+
+where ``adj_matrix`` is a symmetric n×n adjacency matrix (list of lists)
+with a zero diagonal, ``colors`` is the list of color assignments (length n)
+and ``nb_colors`` is the number of distinct colors used.
+"""
+
+# Core algorithms (always available)
+from .dsatur import dsatur_coloring
+from .greedy import greedy_coloring
+from .ido import ido_coloring
+from .random_greedy import best_random_greedy_coloring, random_greedy_coloring
+from .rlf import rlf_coloring
+from .sa import sa_coloring
+from .smallest_degree_last import smallest_degree_last_coloring
+from .tabu import tabucol_coloring
+from .welsh_powell import welsh_powell_coloring
+
+# Optional algorithms (may require extra dependencies)
+try:
+    from .backtrack import backtrack_coloring
+except ImportError:
+    backtrack_coloring = None
+
+try:
+    from .cpsat import cpsat_coloring
+except ImportError:
+    cpsat_coloring = None
+
+try:
+    from .hea import hea_coloring
+except ImportError:
+    hea_coloring = None
+
+try:
+    from .sat import sat_coloring
+except ImportError:
+    sat_coloring = None
+
+try:
+    from .scip import scip_coloring
+except ImportError:
+    scip_coloring = None
+
+try:
+    from .z3_solver import z3_coloring
+except ImportError:
+    z3_coloring = None
+
+__all__ = [
+    "dsatur_coloring",
+    "greedy_coloring",
+    "ido_coloring",
+    "best_random_greedy_coloring",
+    "random_greedy_coloring",
+    "rlf_coloring",
+    "sa_coloring",
+    "smallest_degree_last_coloring",
+    "tabucol_coloring",
+    "welsh_powell_coloring",
+]
+
+# Add optional algorithms to __all__ if available
+if backtrack_coloring is not None:
+    __all__.append("backtrack_coloring")
+
+if cpsat_coloring is not None:
+    __all__.append("cpsat_coloring")
+
+if hea_coloring is not None:
+    __all__.append("hea_coloring")
+
+if sat_coloring is not None:
+    __all__.append("sat_coloring")
+
+if scip_coloring is not None:
+    __all__.append("scip_coloring")
+
+if z3_coloring is not None:
+    __all__.append("z3_coloring")
+</file>
+
+<file path="backtrack.py">
+#!/usr/bin/env python3
+
+def backtrack_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the backtracking algorithm (exact).
+
+    Explores all possible color assignments via backtracking
+    to find the optimal chromatic number (minimum number of colors).
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex (optimal coloring).
+    nb_colors : int
+        Chromatic number (minimum number of colors used).
+    """
+    n = len(adj_matrix)
+    best_colors = None
+    best_nb = n + 1
+
+    # Welsh-Powell order: sort vertices by decreasing degree
+    # vertices with highest degree are processed first to increase chances of finding the optimal solution quickly
+    degrees = [sum(row) for row in adj_matrix]
+    order = sorted(range(n), key=lambda i: degrees[i], reverse=True)
+
+    # Precompute neighbors for each vertex
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+
+    def is_safe(u, c, current_colors):
+        # for each neighbor v of u, if v has color c, then u cannot have color c
+        for v in neighbors[u]:
+            if current_colors[v] == c:
+                return False
+        return True
+
+    def backtrack(idx, current_colors, max_color):
+        nonlocal best_colors, best_nb
+
+        # Current number of colors = max_color + 1
+        if max_color + 1 >= best_nb:
+            return
+
+        if idx == n:
+            best_colors = current_colors[:]
+            best_nb = max_color + 1
+            return
+
+        u = order[idx]
+
+        for c in range(max_color + 1):
+            if is_safe(u, c, current_colors):
+                current_colors[u] = c
+                backtrack(idx + 1, current_colors, max_color)
+                current_colors[u] = -1
+
+        # Try a new color
+        if max_color + 1 < best_nb:
+            current_colors[u] = max_color + 1
+            backtrack(idx + 1, current_colors, max_color + 1)
+            current_colors[u] = -1
+
+    current_colors = [-1] * n
+    backtrack(0, current_colors, -1)
+
+    return best_colors, best_nb
+</file>
+
+<file path="common.py">
+#!/usr/bin/env python3
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+def _adj_list_to_matrix(adj_list):
+    n = len(adj_list)
+    adj_matrix = [[0] * n for _ in range(n)]
+    for u in range(n):
+        for v in adj_list[u]:
+            adj_matrix[u][v] = 1
+    return adj_matrix
+
+def _greedy_coloring(adj_list):
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+def _verify_coloring(adj_matrix, colors):
+    n = len(adj_matrix)
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v] and colors[u] == colors[v]:
+                return False
+    return True
+</file>
+
+<file path="cpsat.py">
+#!/usr/bin/env python3
+"""
+Google OR-Tools CP-SAT solver for Graph Coloring.
+Uses the CP-SAT (Constraint Programming) solver from OR-Tools.
+"""
+
+from ortools.sat.python import cp_model
+
+
+def cpsat_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using OR-Tools CP-SAT solver.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds (default: 60).
+    seed : int, optional
+        Random seed for reproducibility.
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = cp_model.CpModel()
+    rng = cp_model.LinearExpr
+    solver = cp_model.CpSolver()
+    
+    solver.parameters.max_time_in_seconds = time_limit
+    if seed is not None:
+        solver.parameters.random_seed = seed
+
+    edges = []
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    best_k = None
+    best_colors = None
+
+    # Start with greedy upper bound
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+    
+    for k in range(1, greedy_k + 1):
+        colors = [model.NewIntVar(0, k - 1, f'c_{i}') for i in range(n)]
+
+        for u, v in edges:
+            model.Add(colors[u] != colors[v])
+
+        solver.parameters.max_time_in_seconds = min(time_limit, time_limit / k)
+
+        status = solver.Solve(model)
+
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            solution = [solver.Value(colors[i]) for i in range(n)]
+            if best_k is None or k < best_k:
+                best_k = k
+                best_colors = solution
+                if status == cp_model.OPTIMAL:
+                    break
+        model = cp_model.CpModel()
+
+    if best_colors is None:
+        best_colors = [0] * n
+        best_k = 1
+
+    return best_colors, best_k
+
+
+def cpsat_coloring_fixed_k(adj_matrix, k, time_limit=60, seed=None, verbose=False):
+    """
+    CP-SAT variant that tries to find a valid coloring with a fixed number of colors k.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = cp_model.CpModel()
+    solver = cp_model.CpSolver()
+    
+    if seed is not None:
+        solver.parameters.random_seed = seed
+    solver.parameters.max_time_in_seconds = time_limit
+
+    colors = [model.NewIntVar(0, k - 1, f'c_{i}') for i in range(n)]
+
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                model.Add(colors[u] != colors[v])
+
+    status = solver.Solve(model)
+
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        solution = [solver.Value(colors[i]) for i in range(n)]
+        return solution, k
+    else:
+        from .common import _greedy_coloring, _matrix_to_adj_list
+        adj_list = _matrix_to_adj_list(adj_matrix)
+        _, greedy_k = _greedy_coloring(adj_list)
+        return [0] * n, greedy_k
+</file>
+
+<file path="dsatur.py">
+#!/usr/bin/env python3
+
+def dsatur_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the DSATUR algorithm.
+
+    DSATUR (Degree of Saturation) is a greedy coloring algorithm
+    that at each step selects the uncolored vertex with the highest
+    saturation degree (number of different colors already used
+    among its neighbors). In case of ties, the vertex with the
+    highest total degree is chosen.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    deg = [sum(row) for row in adj_matrix]
+    satur = [0] * n
+    # Colors used by neighbors of each vertex (as sets)
+    neighbor_colors = [set() for _ in range(n)]
+
+    # Precompute neighbors
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+
+    # Set of uncolored vertices (sorted by (saturation, degree) at each iteration)
+    uncolored = set(range(n))
+
+    for _ in range(n):
+        # Choose the vertex with the highest saturation, and in case of tie the highest degree
+        u = max(uncolored, key=lambda v: (satur[v], deg[v]))
+
+        # Find the smallest color not used by neighbors
+        used = neighbor_colors[u]
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+        uncolored.remove(u)
+
+        # Update the saturation of uncolored neighbors
+        for v in neighbors[u]:
+            if colors[v] == -1:
+                neighbor_colors[v].add(c)
+                satur[v] = len(neighbor_colors[v])
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="greedy.py">
+#!/usr/bin/env python3
+
+def greedy_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the greedy algorithm.
+
+    Traverses the vertices in increasing order (0, 1, ..., n-1) and assigns
+    to each vertex the smallest color (positive integer) that is not used by
+    its already colored neighbors.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    colors = [-1] * n
+
+    for u in range(n):
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1 if colors else 0
+
+    return colors, nb_colors
+</file>
+
+<file path="hea.py">
+#!/usr/bin/env python3
+"""
+Hybrid Evolutionary Algorithm (HEA) for Graph Coloring.
+Basé sur Galinier & Hao (1999). Combine Algorithme Génétique (GPX) et Tabu Search.
+"""
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _tabu_search_local(adj_list, k, colors, max_iter, rng):
+    """
+    Recherche Tabou pour raffiner une coloration (individu).
+    Version intégrée pour le HEA.
+    """
+    n = len(adj_list)
+    
+    # Initialisation de gamma
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2
+
+    if total_conflicts == 0:
+        return colors, 0
+
+    tabu = [[0] * k for _ in range(n)]
+
+    for iteration in range(1, max_iter + 1):
+        if not conflicts_set:
+            break
+
+        best_move = None
+        best_gain = -float('inf')
+
+        for u in conflicts_set:
+            old_c = colors[u]
+            for new_c in range(k):
+                if new_c == old_c:
+                    continue
+                gain = gamma[u][old_c] - gamma[u][new_c]
+                is_tabu = tabu[u][new_c] > iteration
+                if is_tabu and (total_conflicts - gain) >= total_conflicts:
+                    continue
+                if gain > best_gain:
+                    best_gain = gain
+                    best_move = (u, new_c, old_c)
+
+        if best_move is None:
+            if k <= 1:
+                break
+            u = rng.choice(list(conflicts_set))
+            old_c = colors[u]
+            available = [c for c in range(k) if c != old_c]
+            if not available:
+                break
+            new_c = rng.choice(available)
+            best_gain = gamma[u][old_c] - gamma[u][new_c]
+            best_move = (u, new_c, old_c)
+
+        u, new_c, old_c = best_move
+        colors[u] = new_c
+        total_conflicts -= best_gain
+
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            if gamma[v][colors[v]] == 0: conflicts_set.discard(v)
+            else: conflicts_set.add(v)
+
+        if gamma[u][new_c] == 0: conflicts_set.discard(u)
+        else: conflicts_set.add(u)
+
+        tenure = int(0.6 * len(conflicts_set)) + rng.randint(0, 9)
+        tabu[u][old_c] = iteration + tenure
+
+    return colors, total_conflicts
+
+
+def _gpx_crossover(parent1, parent2, k, rng):
+    """
+    Greedy Partition Crossover (GPX).
+    Construit un enfant en assemblant les meilleures classes de couleur des parents.
+    """
+    n = len(parent1)
+    child = [-1] * n
+    
+    # Transformer les parents en listes d'ensembles (les classes de couleur)
+    p1_classes = [set() for _ in range(k)]
+    p2_classes = [set() for _ in range(k)]
+    for i in range(n):
+        p1_classes[parent1[i]].add(i)
+        p2_classes[parent2[i]].add(i)
+
+    for c in range(k):
+        # Choisir alternativement le parent 1 et le parent 2
+        if c % 2 == 0:
+            source_classes = p1_classes
+            target_classes = p2_classes
+        else:
+            source_classes = p2_classes
+            target_classes = p1_classes
+
+        # Trouver la plus grande classe de couleur disponible
+        max_size = -1
+        best_class_idx = -1
+        for i in range(k):
+            if len(source_classes[i]) > max_size:
+                max_size = len(source_classes[i])
+                best_class_idx = i
+
+        # Assigner cette classe à l'enfant
+        chosen_vertices = source_classes[best_class_idx]
+        for v in chosen_vertices:
+            child[v] = c
+
+        # Retirer ces sommets de l'autre parent pour garder la cohérence
+        for i in range(k):
+            target_classes[i].difference_update(chosen_vertices)
+            
+        # Vider la classe utilisée
+        source_classes[best_class_idx].clear()
+
+    # Les sommets restants (orphelins) prennent une couleur aléatoire
+    for i in range(n):
+        if child[i] == -1:
+            child[i] = rng.randrange(k)
+
+    return child
+
+
+def _hea_search(adj_list, k, pop_size, max_generations, ls_iter, rng, verbose=False):
+    """
+    Cœur de l'Algorithme Évolutif Hybride.
+    """
+    n = len(adj_list)
+    
+    # 1. Initialisation de la population
+    population = []
+    for _ in range(pop_size):
+        colors = [rng.randrange(k) for _ in range(n)]
+        colors, conflicts = _tabu_search_local(adj_list, k, colors, ls_iter, rng)
+        population.append((colors, conflicts))
+        if conflicts == 0:
+            return colors, 0
+
+    # 2. Boucle Évolutive
+    for gen in range(max_generations):
+        # Sélection par tournoi binaire (2 parents)
+        p1_idx = rng.randrange(pop_size)
+        p2_idx = rng.randrange(pop_size)
+        while p2_idx == p1_idx and pop_size > 1:
+            p2_idx = rng.randrange(pop_size)
+            
+        parent1 = population[p1_idx][0]
+        parent2 = population[p2_idx][0]
+
+        # 3. Crossover (GPX)
+        child_colors = _gpx_crossover(parent1, parent2, k, rng)
+
+        # 4. Recherche Locale (Mutation/optimisation par Tabucol)
+        child_colors, child_conflicts = _tabu_search_local(adj_list, k, child_colors, ls_iter, rng)
+
+        if child_conflicts == 0:
+            if verbose: print(f"  HEA: Solution parfaite trouvée à la génération {gen+1}")
+            return child_colors, 0
+
+        # 5. Remplacement (Stratégie de distance génétique)
+        # Remplacer le parent auquel l'enfant ressemble le plus, si l'enfant est meilleur.
+        # On mesure la ressemblance par le nombre de couleurs identiques.
+        dist_p1 = sum(1 for i in range(n) if child_colors[i] == parent1[i])
+        dist_p2 = sum(1 for i in range(n) if child_colors[i] == parent2[i])
+        
+        replace_idx = p1_idx if dist_p1 > dist_p2 else p2_idx
+        
+        if child_conflicts < population[replace_idx][1]:
+            population[replace_idx] = (child_colors, child_conflicts)
+            
+        if verbose and gen % 10 == 0:
+            best_conf = min(c for _, c in population)
+            print(f"  HEA: Gen {gen} | Best Conflicts: {best_conf}")
+
+    # Retourner le meilleur individu trouvé
+    best_idx = min(range(pop_size), key=lambda i: population[i][1])
+    return population[best_idx]
+
+
+def hea_coloring(adj_matrix, pop_size=10, max_generations=50, ls_iter=1000, 
+                 seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using a Hybrid Evolutionary Algorithm.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if verbose:
+        print(f"  HEA: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  HEA: trying k = {current_k}")
+
+        colors, conflicts = _hea_search(adj_list, current_k, pop_size, 
+                                        max_generations, ls_iter, rng, verbose)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  HEA: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  HEA: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def hea_coloring_fixed_k(adj_list, k, pop_size=10, max_generations=50, ls_iter=1000, 
+                         seed=None, verbose=False):
+    """
+    HEA variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _hea_search(adj_list, k, pop_size, max_generations, ls_iter, rng, verbose)
+</file>
+
+<file path="ido.py">
+#!/usr/bin/env python3
+
+def ido_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Incidence Degree Ordering (IDO) algorithm.
+
+    At each step, selects the uncolored vertex with the highest
+    incidence degree (number of colored neighbors — not distinct colors,
+    but the raw count of neighbors that have already been assigned a color).
+    In case of a tie, the highest total degree.
+
+    This differs from DSATUR, which uses the saturation degree (the number
+    of *distinct* colors among neighbors). IDO counts *how many* neighbors
+    are colored, regardless of how many distinct colors they use.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    deg = [sum(row) for row in adj_matrix]
+    # Incidence degree = number of colored neighbors (raw count, not distinct colors)
+    incidence = [0] * n
+    # Colors used by neighbors of each vertex (for assigning the smallest available color)
+    neighbor_colors = [set() for _ in range(n)]
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+    uncolored = set(range(n))
+
+    for _ in range(n):
+        # Incidence degree = number of colored neighbors (not distinct colors)
+        best = max(uncolored, key=lambda v: (incidence[v], deg[v]))
+
+        # Find the smallest color not used by neighbors
+        used = neighbor_colors[best]
+        c = 0
+        while c in used:
+            c += 1
+        colors[best] = c
+        uncolored.discard(best)
+
+        # Update the incidence degree of uncolored neighbors
+        for v in neighbors[best]:
+            if colors[v] == -1:
+                incidence[v] += 1
+                neighbor_colors[v].add(c)
+
+    nb_colors = max(colors) + 1
+    return colors, nb_colors
+</file>
+
+<file path="npx.sh">
+#!/bin/bash
+cd "$(dirname "$0")" || exit 1
+npx repomix
+</file>
+
+<file path="random_greedy.py">
+#!/usr/bin/env python3
+
+import random
+
+
+def random_greedy_coloring(adj_matrix, seed=None):
+    """
+    Colors the vertices of a graph using a greedy coloring on a
+    random order of vertices.
+
+    The order of vertices is randomly shuffled before applying the
+    standard greedy coloring. The random order can be reproduced
+    by setting the seed.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    seed : int, optional
+        Seed for the random generator (reproducibility). Default: None.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    if seed is not None:
+        random.seed(seed)
+
+    order = list(range(n))
+    random.shuffle(order)
+
+    colors = [-1] * n
+
+    for u in order:
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+
+
+def best_random_greedy_coloring(adj_matrix, trials=10, seed=None):
+    """
+    Runs multiple trials of random_greedy_coloring and returns the
+    best coloring found (the one with the fewest colors).
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    trials : int, optional
+        Number of random trials. Default: 10.
+    seed : int, optional
+        Base seed for the trials (each trial uses seed + i).
+
+    Returns
+    -------
+    colors : list[int]
+        Best coloring found.
+    nb_colors : int
+        Corresponding number of colors.
+    """
+    best_colors = None
+    best_nb = float('inf')
+
+    for i in range(trials):
+        s = seed + i if seed is not None else None
+        colors, nb = random_greedy_coloring(adj_matrix, seed=s)
+        if nb < best_nb:
+            best_colors = colors
+            best_nb = nb
+            if best_nb == 0:
+                break
+
+    return best_colors, best_nb
+</file>
+
+<file path="repomix-output.txt">
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+__init__.py
+backtrack.py
+common.py
+cpsat.py
+dsatur.py
+greedy.py
+hea.py
+ido.py
+npx.sh
+random_greedy.py
+rlf.py
+sa.py
+sat.py
+scip.py
+smallest_degree_last.py
+tabu.py
+welsh_powell.py
+z3_solver.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="__init__.py">
+"""
+algo — Graph coloring algorithms package.
+
+Each module exposes a coloring function with the signature::
+
+    coloring_function(adj_matrix, ...) -> (colors, nb_colors)
+
+where ``adj_matrix`` is a symmetric n×n adjacency matrix (list of lists)
+with a zero diagonal, ``colors`` is the list of color assignments (length n)
+and ``nb_colors`` is the number of distinct colors used.
+"""
+
+# Core algorithms (always available)
+from .dsatur import dsatur_coloring
+from .greedy import greedy_coloring
+from .ido import ido_coloring
+from .random_greedy import best_random_greedy_coloring, random_greedy_coloring
+from .rlf import rlf_coloring
+from .sa import sa_coloring
+from .smallest_degree_last import smallest_degree_last_coloring
+from .tabu import tabucol_coloring
+from .welsh_powell import welsh_powell_coloring
+
+# Optional algorithms (may require extra dependencies)
+try:
+    from .backtrack import backtrack_coloring
+except ImportError:
+    backtrack_coloring = None
+
+try:
+    from .cpsat import cpsat_coloring
+except ImportError:
+    cpsat_coloring = None
+
+try:
+    from .hea import hea_coloring
+except ImportError:
+    hea_coloring = None
+
+try:
+    from .sat import sat_coloring
+except ImportError:
+    sat_coloring = None
+
+try:
+    from .scip import scip_coloring
+except ImportError:
+    scip_coloring = None
+
+try:
+    from .z3_solver import z3_coloring
+except ImportError:
+    z3_coloring = None
+
+__all__ = [
+    "dsatur_coloring",
+    "greedy_coloring",
+    "ido_coloring",
+    "best_random_greedy_coloring",
+    "random_greedy_coloring",
+    "rlf_coloring",
+    "sa_coloring",
+    "smallest_degree_last_coloring",
+    "tabucol_coloring",
+    "welsh_powell_coloring",
+]
+
+# Add optional algorithms to __all__ if available
+if backtrack_coloring is not None:
+    __all__.append("backtrack_coloring")
+
+if cpsat_coloring is not None:
+    __all__.append("cpsat_coloring")
+
+if hea_coloring is not None:
+    __all__.append("hea_coloring")
+
+if sat_coloring is not None:
+    __all__.append("sat_coloring")
+
+if scip_coloring is not None:
+    __all__.append("scip_coloring")
+
+if z3_coloring is not None:
+    __all__.append("z3_coloring")
+</file>
+
+<file path="backtrack.py">
+#!/usr/bin/env python3
+
+def backtrack_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the backtracking algorithm (exact).
+
+    Explores all possible color assignments via backtracking
+    to find the optimal chromatic number (minimum number of colors).
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex (optimal coloring).
+    nb_colors : int
+        Chromatic number (minimum number of colors used).
+    """
+    n = len(adj_matrix)
+    best_colors = None
+    best_nb = n + 1
+
+    # Welsh-Powell order: sort vertices by decreasing degree
+    # vertices with highest degree are processed first to increase chances of finding the optimal solution quickly
+    degrees = [sum(row) for row in adj_matrix]
+    order = sorted(range(n), key=lambda i: degrees[i], reverse=True)
+
+    # Precompute neighbors for each vertex
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+
+    def is_safe(u, c, current_colors):
+        # for each neighbor v of u, if v has color c, then u cannot have color c
+        for v in neighbors[u]:
+            if current_colors[v] == c:
+                return False
+        return True
+
+    def backtrack(idx, current_colors, max_color):
+        nonlocal best_colors, best_nb
+
+        # Current number of colors = max_color + 1
+        if max_color + 1 >= best_nb:
+            return
+
+        if idx == n:
+            best_colors = current_colors[:]
+            best_nb = max_color + 1
+            return
+
+        u = order[idx]
+
+        for c in range(max_color + 1):
+            if is_safe(u, c, current_colors):
+                current_colors[u] = c
+                backtrack(idx + 1, current_colors, max_color)
+                current_colors[u] = -1
+
+        # Try a new color
+        if max_color + 1 < best_nb:
+            current_colors[u] = max_color + 1
+            backtrack(idx + 1, current_colors, max_color + 1)
+            current_colors[u] = -1
+
+    current_colors = [-1] * n
+    backtrack(0, current_colors, -1)
+
+    return best_colors, best_nb
+</file>
+
+<file path="common.py">
+#!/usr/bin/env python3
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+def _adj_list_to_matrix(adj_list):
+    n = len(adj_list)
+    adj_matrix = [[0] * n for _ in range(n)]
+    for u in range(n):
+        for v in adj_list[u]:
+            adj_matrix[u][v] = 1
+    return adj_matrix
+
+def _greedy_coloring(adj_list):
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+def _verify_coloring(adj_matrix, colors):
+    n = len(adj_matrix)
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v] and colors[u] == colors[v]:
+                return False
+    return True
+</file>
+
+<file path="cpsat.py">
+#!/usr/bin/env python3
+"""
+Google OR-Tools CP-SAT solver for Graph Coloring.
+Uses the CP-SAT (Constraint Programming) solver from OR-Tools.
+"""
+
+from ortools.sat.python import cp_model
+
+
+def cpsat_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using OR-Tools CP-SAT solver.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds (default: 60).
+    seed : int, optional
+        Random seed for reproducibility.
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = cp_model.CpModel()
+    rng = cp_model.LinearExpr
+    solver = cp_model.CpSolver()
+    
+    solver.parameters.max_time_in_seconds = time_limit
+    if seed is not None:
+        solver.parameters.random_seed = seed
+
+    edges = []
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    best_k = None
+    best_colors = None
+
+    # Start with greedy upper bound
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+    
+    for k in range(1, greedy_k + 1):
+        colors = [model.NewIntVar(0, k - 1, f'c_{i}') for i in range(n)]
+
+        for u, v in edges:
+            model.Add(colors[u] != colors[v])
+
+        solver.parameters.max_time_in_seconds = min(time_limit, time_limit / k)
+
+        status = solver.Solve(model)
+
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            solution = [solver.Value(colors[i]) for i in range(n)]
+            if best_k is None or k < best_k:
+                best_k = k
+                best_colors = solution
+                if status == cp_model.OPTIMAL:
+                    break
+        model = cp_model.CpModel()
+
+    if best_colors is None:
+        best_colors = [0] * n
+        best_k = 1
+
+    return best_colors, best_k
+
+
+def cpsat_coloring_fixed_k(adj_matrix, k, time_limit=60, seed=None, verbose=False):
+    """
+    CP-SAT variant that tries to find a valid coloring with a fixed number of colors k.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = cp_model.CpModel()
+    solver = cp_model.CpSolver()
+    
+    if seed is not None:
+        solver.parameters.random_seed = seed
+    solver.parameters.max_time_in_seconds = time_limit
+
+    colors = [model.NewIntVar(0, k - 1, f'c_{i}') for i in range(n)]
+
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                model.Add(colors[u] != colors[v])
+
+    status = solver.Solve(model)
+
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        solution = [solver.Value(colors[i]) for i in range(n)]
+        return solution, k
+    else:
+        from .common import _greedy_coloring, _matrix_to_adj_list
+        adj_list = _matrix_to_adj_list(adj_matrix)
+        _, greedy_k = _greedy_coloring(adj_list)
+        return [0] * n, greedy_k
+</file>
+
+<file path="dsatur.py">
+#!/usr/bin/env python3
+
+def dsatur_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the DSATUR algorithm.
+
+    DSATUR (Degree of Saturation) is a greedy coloring algorithm
+    that at each step selects the uncolored vertex with the highest
+    saturation degree (number of different colors already used
+    among its neighbors). In case of ties, the vertex with the
+    highest total degree is chosen.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    deg = [sum(row) for row in adj_matrix]
+    satur = [0] * n
+    # Colors used by neighbors of each vertex (as sets)
+    neighbor_colors = [set() for _ in range(n)]
+
+    # Precompute neighbors
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+
+    # Set of uncolored vertices (sorted by (saturation, degree) at each iteration)
+    uncolored = set(range(n))
+
+    for _ in range(n):
+        # Choose the vertex with the highest saturation, and in case of tie the highest degree
+        u = max(uncolored, key=lambda v: (satur[v], deg[v]))
+
+        # Find the smallest color not used by neighbors
+        used = neighbor_colors[u]
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+        uncolored.remove(u)
+
+        # Update the saturation of uncolored neighbors
+        for v in neighbors[u]:
+            if colors[v] == -1:
+                neighbor_colors[v].add(c)
+                satur[v] = len(neighbor_colors[v])
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="greedy.py">
+#!/usr/bin/env python3
+
+def greedy_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the greedy algorithm.
+
+    Traverses the vertices in increasing order (0, 1, ..., n-1) and assigns
+    to each vertex the smallest color (positive integer) that is not used by
+    its already colored neighbors.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    colors = [-1] * n
+
+    for u in range(n):
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1 if colors else 0
+
+    return colors, nb_colors
+</file>
+
+<file path="hea.py">
+#!/usr/bin/env python3
+"""
+Hybrid Evolutionary Algorithm (HEA) for Graph Coloring.
+Basé sur Galinier & Hao (1999). Combine Algorithme Génétique (GPX) et Tabu Search.
+"""
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _tabu_search_local(adj_list, k, colors, max_iter, rng):
+    """
+    Recherche Tabou pour raffiner une coloration (individu).
+    Version intégrée pour le HEA.
+    """
+    n = len(adj_list)
+    
+    # Initialisation de gamma
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2
+
+    if total_conflicts == 0:
+        return colors, 0
+
+    tabu = [[0] * k for _ in range(n)]
+
+    for iteration in range(1, max_iter + 1):
+        if not conflicts_set:
+            break
+
+        best_move = None
+        best_gain = -float('inf')
+
+        for u in conflicts_set:
+            old_c = colors[u]
+            for new_c in range(k):
+                if new_c == old_c:
+                    continue
+                gain = gamma[u][old_c] - gamma[u][new_c]
+                is_tabu = tabu[u][new_c] > iteration
+                if is_tabu and (total_conflicts - gain) >= total_conflicts:
+                    continue
+                if gain > best_gain:
+                    best_gain = gain
+                    best_move = (u, new_c, old_c)
+
+        if best_move is None:
+            if k <= 1:
+                break
+            u = rng.choice(list(conflicts_set))
+            old_c = colors[u]
+            available = [c for c in range(k) if c != old_c]
+            if not available:
+                break
+            new_c = rng.choice(available)
+            best_gain = gamma[u][old_c] - gamma[u][new_c]
+            best_move = (u, new_c, old_c)
+
+        u, new_c, old_c = best_move
+        colors[u] = new_c
+        total_conflicts -= best_gain
+
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            if gamma[v][colors[v]] == 0: conflicts_set.discard(v)
+            else: conflicts_set.add(v)
+
+        if gamma[u][new_c] == 0: conflicts_set.discard(u)
+        else: conflicts_set.add(u)
+
+        tenure = int(0.6 * len(conflicts_set)) + rng.randint(0, 9)
+        tabu[u][old_c] = iteration + tenure
+
+    return colors, total_conflicts
+
+
+def _gpx_crossover(parent1, parent2, k, rng):
+    """
+    Greedy Partition Crossover (GPX).
+    Construit un enfant en assemblant les meilleures classes de couleur des parents.
+    """
+    n = len(parent1)
+    child = [-1] * n
+    
+    # Transformer les parents en listes d'ensembles (les classes de couleur)
+    p1_classes = [set() for _ in range(k)]
+    p2_classes = [set() for _ in range(k)]
+    for i in range(n):
+        p1_classes[parent1[i]].add(i)
+        p2_classes[parent2[i]].add(i)
+
+    for c in range(k):
+        # Choisir alternativement le parent 1 et le parent 2
+        if c % 2 == 0:
+            source_classes = p1_classes
+            target_classes = p2_classes
+        else:
+            source_classes = p2_classes
+            target_classes = p1_classes
+
+        # Trouver la plus grande classe de couleur disponible
+        max_size = -1
+        best_class_idx = -1
+        for i in range(k):
+            if len(source_classes[i]) > max_size:
+                max_size = len(source_classes[i])
+                best_class_idx = i
+
+        # Assigner cette classe à l'enfant
+        chosen_vertices = source_classes[best_class_idx]
+        for v in chosen_vertices:
+            child[v] = c
+
+        # Retirer ces sommets de l'autre parent pour garder la cohérence
+        for i in range(k):
+            target_classes[i].difference_update(chosen_vertices)
+            
+        # Vider la classe utilisée
+        source_classes[best_class_idx].clear()
+
+    # Les sommets restants (orphelins) prennent une couleur aléatoire
+    for i in range(n):
+        if child[i] == -1:
+            child[i] = rng.randrange(k)
+
+    return child
+
+
+def _hea_search(adj_list, k, pop_size, max_generations, ls_iter, rng, verbose=False):
+    """
+    Cœur de l'Algorithme Évolutif Hybride.
+    """
+    n = len(adj_list)
+    
+    # 1. Initialisation de la population
+    population = []
+    for _ in range(pop_size):
+        colors = [rng.randrange(k) for _ in range(n)]
+        colors, conflicts = _tabu_search_local(adj_list, k, colors, ls_iter, rng)
+        population.append((colors, conflicts))
+        if conflicts == 0:
+            return colors, 0
+
+    # 2. Boucle Évolutive
+    for gen in range(max_generations):
+        # Sélection par tournoi binaire (2 parents)
+        p1_idx = rng.randrange(pop_size)
+        p2_idx = rng.randrange(pop_size)
+        while p2_idx == p1_idx and pop_size > 1:
+            p2_idx = rng.randrange(pop_size)
+            
+        parent1 = population[p1_idx][0]
+        parent2 = population[p2_idx][0]
+
+        # 3. Crossover (GPX)
+        child_colors = _gpx_crossover(parent1, parent2, k, rng)
+
+        # 4. Recherche Locale (Mutation/optimisation par Tabucol)
+        child_colors, child_conflicts = _tabu_search_local(adj_list, k, child_colors, ls_iter, rng)
+
+        if child_conflicts == 0:
+            if verbose: print(f"  HEA: Solution parfaite trouvée à la génération {gen+1}")
+            return child_colors, 0
+
+        # 5. Remplacement (Stratégie de distance génétique)
+        # Remplacer le parent auquel l'enfant ressemble le plus, si l'enfant est meilleur.
+        # On mesure la ressemblance par le nombre de couleurs identiques.
+        dist_p1 = sum(1 for i in range(n) if child_colors[i] == parent1[i])
+        dist_p2 = sum(1 for i in range(n) if child_colors[i] == parent2[i])
+        
+        replace_idx = p1_idx if dist_p1 > dist_p2 else p2_idx
+        
+        if child_conflicts < population[replace_idx][1]:
+            population[replace_idx] = (child_colors, child_conflicts)
+            
+        if verbose and gen % 10 == 0:
+            best_conf = min(c for _, c in population)
+            print(f"  HEA: Gen {gen} | Best Conflicts: {best_conf}")
+
+    # Retourner le meilleur individu trouvé
+    best_idx = min(range(pop_size), key=lambda i: population[i][1])
+    return population[best_idx]
+
+
+def hea_coloring(adj_matrix, pop_size=10, max_generations=50, ls_iter=1000, 
+                 seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using a Hybrid Evolutionary Algorithm.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if verbose:
+        print(f"  HEA: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  HEA: trying k = {current_k}")
+
+        colors, conflicts = _hea_search(adj_list, current_k, pop_size, 
+                                        max_generations, ls_iter, rng, verbose)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  HEA: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  HEA: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def hea_coloring_fixed_k(adj_list, k, pop_size=10, max_generations=50, ls_iter=1000, 
+                         seed=None, verbose=False):
+    """
+    HEA variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _hea_search(adj_list, k, pop_size, max_generations, ls_iter, rng, verbose)
+</file>
+
+<file path="ido.py">
+#!/usr/bin/env python3
+
+def ido_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Incidence Degree Ordering (IDO) algorithm.
+
+    At each step, selects the uncolored vertex with the highest
+    incidence degree (number of colored neighbors — not distinct colors,
+    but the raw count of neighbors that have already been assigned a color).
+    In case of a tie, the highest total degree.
+
+    This differs from DSATUR, which uses the saturation degree (the number
+    of *distinct* colors among neighbors). IDO counts *how many* neighbors
+    are colored, regardless of how many distinct colors they use.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    deg = [sum(row) for row in adj_matrix]
+    # Incidence degree = number of colored neighbors (raw count, not distinct colors)
+    incidence = [0] * n
+    # Colors used by neighbors of each vertex (for assigning the smallest available color)
+    neighbor_colors = [set() for _ in range(n)]
+    neighbors = [[v for v in range(n) if adj_matrix[u][v] == 1] for u in range(n)]
+    uncolored = set(range(n))
+
+    for _ in range(n):
+        # Incidence degree = number of colored neighbors (not distinct colors)
+        best = max(uncolored, key=lambda v: (incidence[v], deg[v]))
+
+        # Find the smallest color not used by neighbors
+        used = neighbor_colors[best]
+        c = 0
+        while c in used:
+            c += 1
+        colors[best] = c
+        uncolored.discard(best)
+
+        # Update the incidence degree of uncolored neighbors
+        for v in neighbors[best]:
+            if colors[v] == -1:
+                incidence[v] += 1
+                neighbor_colors[v].add(c)
+
+    nb_colors = max(colors) + 1
+    return colors, nb_colors
+</file>
+
+<file path="npx.sh">
+#!/bin/bash
+cd "$(dirname "$0")" || exit 1
+npx repomix
+</file>
+
+<file path="random_greedy.py">
+#!/usr/bin/env python3
+
+import random
+
+
+def random_greedy_coloring(adj_matrix, seed=None):
+    """
+    Colors the vertices of a graph using a greedy coloring on a
+    random order of vertices.
+
+    The order of vertices is randomly shuffled before applying the
+    standard greedy coloring. The random order can be reproduced
+    by setting the seed.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    seed : int, optional
+        Seed for the random generator (reproducibility). Default: None.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    if seed is not None:
+        random.seed(seed)
+
+    order = list(range(n))
+    random.shuffle(order)
+
+    colors = [-1] * n
+
+    for u in order:
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+
+
+def best_random_greedy_coloring(adj_matrix, trials=10, seed=None):
+    """
+    Runs multiple trials of random_greedy_coloring and returns the
+    best coloring found (the one with the fewest colors).
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    trials : int, optional
+        Number of random trials. Default: 10.
+    seed : int, optional
+        Base seed for the trials (each trial uses seed + i).
+
+    Returns
+    -------
+    colors : list[int]
+        Best coloring found.
+    nb_colors : int
+        Corresponding number of colors.
+    """
+    best_colors = None
+    best_nb = float('inf')
+
+    for i in range(trials):
+        s = seed + i if seed is not None else None
+        colors, nb = random_greedy_coloring(adj_matrix, seed=s)
+        if nb < best_nb:
+            best_colors = colors
+            best_nb = nb
+            if best_nb == 0:
+                break
+
+    return best_colors, best_nb
+</file>
+
+<file path="rlf.py">
+#!/usr/bin/env python3
+
+def rlf_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Recursive Largest First (RLF) algorithm.
+
+    Builds the color classes one by one. For each color, iteratively selects
+    the uncolored vertex with the most uncolored neighbors in the current class,
+    until no more vertices can be added.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    neighbors = [set(v for v in range(n) if adj_matrix[u][v] == 1) for u in range(n)]
+    uncolored = set(range(n))
+    current_color = 0
+
+    while uncolored:
+        # Current color class
+        color_class = []
+
+        # Candidates = uncolored vertices without neighbors in the current class
+        candidates = set(uncolored)
+
+        while candidates:
+            # Choose the vertex with the most uncolored neighbors (outside class)
+            best = max(candidates, key=lambda v: len(neighbors[v] & uncolored))
+            color_class.append(best)
+            candidates.discard(best)
+
+            # Remove neighbors of the chosen vertex from candidates
+            for w in neighbors[best]:
+                candidates.discard(w)
+
+        # Assign the current color
+        for v in color_class:
+            colors[v] = current_color
+            uncolored.discard(v)
+
+        current_color += 1
+
+    nb_colors = current_color
+    return colors, nb_colors
+</file>
+
+<file path="sa.py">
+#!/usr/bin/env python3
+"""
+Simulated Annealing for Graph Coloring.
+Version optimisée avec matrice gamma.
+"""
+
+import random
+import math
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _sa_search(adj_list, k, max_iter, initial_temp, cooling_rate, min_temp, rng):
+    """
+    Cœur du Recuit Simulé.
+    Évalue un mouvement en O(1) et met à jour la structure en O(deg(u)).
+    """
+    n = len(adj_list)
+    if k <= 1:
+        if all(len(neighbors) == 0 for neighbors in adj_list):
+            return [0] * n, 0
+        else:
+            return [0] * n, sum(len(neighbors) for neighbors in adj_list) // 2
+
+    # 1. Initialisation
+    colors = [rng.randrange(k) for _ in range(n)]
+    
+    # gamma[u][c] = nombre de voisins de u colorés avec c
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    # Calcul des conflits initiaux
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2
+
+    best_colors = colors[:]
+    best_total_conflicts = total_conflicts
+
+    if total_conflicts == 0:
+        return best_colors, 0
+
+    T = initial_temp
+    
+    # Convertir set en list pour un accès aléatoire O(1) rapide
+    conflicts_list = list(conflicts_set)
+
+    # 2. Boucle principale du Recuit
+    for iteration in range(1, max_iter + 1):
+        if total_conflicts == 0:
+            break
+            
+        # Refroidissement
+        if T > min_temp:
+            T *= cooling_rate
+        else:
+            T = min_temp
+
+        # Choisir un sommet aléatoire en conflit
+        u = rng.choice(conflicts_list)
+        old_c = colors[u]
+        
+        # Choisir une nouvelle couleur aléatoire
+        available_c = [c for c in range(k) if c != old_c]
+        new_c = rng.choice(available_c)
+
+        # Delta E = variation du nombre de conflits
+        delta_E = gamma[u][new_c] - gamma[u][old_c]
+
+        # Critère d'acceptation de Metropolis
+        accept = False
+        if delta_E <= 0:
+            accept = True
+        else:
+            # Probabilité d'accepter un mouvement dégradant
+            prob = math.exp(-delta_E / T)
+            if rng.random() < prob:
+                accept = True
+
+        if not accept:
+            continue
+
+        # 3. Appliquer le mouvement
+        colors[u] = new_c
+        total_conflicts += delta_E
+
+        # Mise à jour de gamma et des conflits pour les voisins
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            
+            # Mettre à jour le statut de conflit du voisin v
+            if gamma[v][colors[v]] == 0:
+                if v in conflicts_set:
+                    conflicts_set.discard(v)
+            else:
+                if v not in conflicts_set:
+                    conflicts_set.add(v)
+
+        # Mettre à jour le statut de u
+        if gamma[u][new_c] == 0:
+            conflicts_set.discard(u)
+        else:
+            conflicts_set.add(u)
+            
+        # Synchroniser la liste
+        conflicts_list = list(conflicts_set)
+
+        # 4. Sauvegarder le meilleur état
+        if total_conflicts < best_total_conflicts:
+            best_total_conflicts = total_conflicts
+            best_colors = colors[:]
+            if best_total_conflicts == 0:
+                break
+
+    return best_colors, best_total_conflicts
+
+
+def sa_coloring(adj_matrix, max_iter=20000, initial_temp=10.0, cooling_rate=0.999, 
+                min_temp=0.01, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using Simulated Annealing.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    Essaie de réduire k itérativement comme pour Tabucol.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if verbose:
+        print(f"  SA: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  SA: trying k = {current_k}")
+
+        colors, conflicts = _sa_search(adj_list, current_k, max_iter, 
+                                       initial_temp, cooling_rate, min_temp, rng)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  SA: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  SA: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def sa_coloring_fixed_k(adj_list, k, max_iter=20000, initial_temp=10.0, 
+                        cooling_rate=0.999, min_temp=0.01, seed=None, verbose=False):
+    """
+    SA variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _sa_search(adj_list, k, max_iter, initial_temp, cooling_rate, min_temp, rng)
+</file>
+
+<file path="sat.py">
+#!/usr/bin/env python3
+"""
+SAT solver for Graph Coloring via pysat.
+Encodes graph coloring as a SAT problem and uses pysat solvers.
+"""
+
+import time
+import threading
+from pysat.solvers import Glucose3
+
+
+def sat_coloring_sat(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using a SAT solver via pysat.
+
+    Uses binary search on k instead of linear search for efficiency.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds.
+    seed : int, optional
+        Random seed (not used by pysat, kept for API consistency).
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    edges = []
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+
+    best_k = None
+    best_colors = None
+
+    def try_solve(k, time_budget):
+        """Try to solve for k colors within time_budget seconds."""
+        clauses = []
+
+        # Each vertex must have at least one color
+        for v in range(n):
+            clause = [v * k + c + 1 for c in range(k)]
+            clauses.append(clause)
+
+        # Each vertex cannot have more than one color
+        for v in range(n):
+            for c1 in range(k):
+                for c2 in range(c1 + 1, k):
+                    clauses.append([-(v * k + c1 + 1), -(v * k + c2 + 1)])
+
+        # Adjacent vertices cannot have the same color
+        for u, v in edges:
+            for c in range(k):
+                clauses.append([-(u * k + c + 1), -(v * k + c + 1)])
+
+        result = [None]
+        exception = [None]
+        
+        def solve_thread():
+            try:
+                with Glucose3(bootstrap_with=clauses) as solver:
+                    if solver.solve():
+                        model = solver.get_model()
+                        solution = [-1] * n
+                        for lit in model:
+                            if lit > 0:
+                                var_idx = (lit - 1) % k
+                                v = (lit - 1) // k
+                                solution[v] = var_idx
+                        if -1 not in solution:
+                            result[0] = solution
+                            return
+                result[0] = None
+            except Exception as e:
+                exception[0] = e
+
+        t = threading.Thread(target=solve_thread)
+        t.daemon = True
+        t.start()
+        t.join(timeout=time_budget)
+        
+        if t.is_alive():
+            # Timeout - can't easily stop pysat, just return None
+            return "timeout"
+        if exception[0]:
+            if verbose:
+                print(f"  SAT: Error with k={k}: {exception[0]}")
+            return False
+        return result[0]
+
+    # Binary search on k
+    low, high = 1, greedy_k
+    start_time = time.time()
+    
+    while low <= high:
+        elapsed = time.time() - start_time
+        remaining = time_limit - elapsed
+        if remaining <= 0:
+            if verbose:
+                print(f"  SAT: Time limit reached")
+            break
+            
+        k = (low + high) // 2
+        if verbose:
+            print(f"  SAT: trying k={k} (remaining: {remaining:.1f}s)")
+        
+        # Give at most 10s per attempt
+        attempt_time = min(remaining, 10.0)
+        result = try_solve(k, attempt_time)
+        
+        if result == "timeout":
+            if verbose:
+                print(f"  SAT: timeout at k={k}")
+            # Timeout - treat as UNSAT, try higher
+            low = k + 1
+        elif result is not False:
+            # SAT or solution found
+            if result is not None:
+                best_k = k
+                best_colors = result
+                if verbose:
+                    print(f"  SAT: found coloring with k={k}")
+                high = k - 1
+            else:
+                low = k + 1
+        else:
+            # Error
+            low = k + 1
+
+    # Fallback
+    if best_colors is None:
+        best_colors = [0] * n
+        best_k = n
+
+    return best_colors, best_k
+
+
+def sat_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using SAT encoding with pysat solvers.
+    """
+    return sat_coloring_sat(adj_matrix, time_limit, seed, verbose)
+</file>
+
+<file path="scip.py">
+#!/usr/bin/env python3
+"""
+SCIP solver for Graph Coloring via pyscipopt.
+Uses SCIP MIP solver for graph coloring optimization.
+"""
+
+import pyscipopt
+
+
+def scip_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using SCIP MIP solver.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds (default: 60).
+    seed : int, optional
+        Random seed for SCIP.
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    edges = []
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+
+    best_k = None
+    best_colors = None
+
+    for k in range(1, greedy_k + 1):
+        model = pyscipopt.Model()
+        if verbose:
+            model.setParam('display/verbosity', 5)
+        else:
+            model.setParam('display/verbosity', 0)
+        
+        if seed is not None:
+            model.setParam('randomization/seed', seed)
+        model.setParam('limits/time', time_limit)
+
+        x = {}
+        for v in range(n):
+            for c in range(k):
+                x[v, c] = model.addVar(vtype='BINARY', name=f'x_{v}_{c}')
+
+        for v in range(n):
+            model.addCons(pyscipopt.quicksum(x[v, c] for c in range(k)) == 1)
+
+        for u, v in edges:
+            for c in range(k):
+                model.addCons(x[u, c] + x[v, c] <= 1)
+
+        model.optimize()
+
+        status = model.getStatus()
+        if status in ['optimal', 'feasible']:
+            solution = [-1] * n
+            for v in range(n):
+                for c in range(k):
+                    if model.getVal(x[v, c]) > 0.5:
+                        solution[v] = c
+            
+            if -1 not in solution:
+                if best_k is None or k < best_k:
+                    best_k = k
+                    best_colors = solution
+                    if status == 'optimal':
+                        break
+
+        model.delModel()
+
+    if best_colors is None:
+        best_colors = [0] * n
+        best_k = n
+
+    return best_colors, best_k
+
+
+def scip_coloring_fixed_k(adj_matrix, k, time_limit=60, seed=None, verbose=False):
+    """
+    SCIP variant that tries to find a valid coloring with a fixed number of colors k.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = pyscipopt.Model()
+    if verbose:
+        model.setParam('display/verbosity', 5)
+    else:
+        model.setParam('display/verbosity', 0)
+    
+    if seed is not None:
+        model.setParam('randomization/seed', seed)
+    model.setParam('limits/time', time_limit)
+
+    x = {}
+    for v in range(n):
+        for c in range(k):
+            x[v, c] = model.addVar(vtype='BINARY', name=f'x_{v}_{c}')
+
+    for v in range(n):
+        model.addCons(pyscipopt.quicksum(x[v, c] for c in range(k)) == 1)
+
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                for c in range(k):
+                    model.addCons(x[u, c] + x[v, c] <= 1)
+
+    model.optimize()
+
+    status = model.getStatus()
+    if status in ['optimal', 'feasible']:
+        solution = [-1] * n
+        for v in range(n):
+            for c in range(k):
+                if model.getVal(x[v, c]) > 0.5:
+                    solution[v] = c
+        return solution, k
+    else:
+        from .common import _greedy_coloring, _matrix_to_adj_list
+        adj_list = _matrix_to_adj_list(adj_matrix)
+        _, greedy_k = _greedy_coloring(adj_list)
+        return [0] * n, greedy_k
+</file>
+
+<file path="smallest_degree_last.py">
+#!/usr/bin/env python3
+
+def smallest_degree_last_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Smallest Degree Last (SDL) algorithm.
+
+    Iteratively removes the vertex with the smallest degree in the current
+    graph, stacks the vertices as it goes, then colors them in the reverse
+    order of their removal (last removed = first colored) with standard greedy
+    coloring.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Copy the matrix to modify it
+    mat = [row[:] for row in adj_matrix]
+    # Current degrees
+    deg = [sum(row) for row in mat]
+    # Marked as removed
+    removed = [False] * n
+    # Removal order (stack)
+    stack = []
+
+    for _ in range(n):
+        # Find the non-removed vertex with the smallest degree
+        u = min((i for i in range(n) if not removed[i]), key=lambda i: deg[i])
+        stack.append(u)
+        removed[u] = True
+
+        # Decrement the degrees of neighbors still present
+        for v in range(n):
+            if mat[u][v] == 1 and not removed[v]:
+                deg[v] -= 1
+
+    # Color in reverse order of the stack
+    colors = [-1] * n
+
+    while stack:
+        u = stack.pop()
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="tabu.py">
+#!/usr/bin/env python3
+"""
+Tabucol — Tabu Search for Graph Coloring (Hertz & de Werra, 1987).
+Version optimisée.
+"""
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _tabu_search(adj_list, k, max_iter, rng):
+    """
+    Cœur du Tabucol optimisé.
+    Utilise la matrice gamma pour évaluer les moves en O(1) et les appliquer en O(deg(u)).
+    """
+    n = len(adj_list)
+    if k <= 1:
+        # Cas trivial : k=1 n'est valide que s'il n'y a aucune arête
+        if all(len(neighbors) == 0 for neighbors in adj_list):
+            return [0] * n, 0
+        else:
+            return [0] * n, sum(len(neighbors) for neighbors in adj_list) // 2
+
+    # 1. Initialisation
+    colors = [rng.randrange(k) for _ in range(n)]
+    
+    # gamma[u][c] = nombre de voisins de u colorés avec c
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    # Calcul des conflits initiaux
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2  # Chaque arête en conflit est comptée deux fois
+
+    best_colors = colors[:]
+    best_total_conflicts = total_conflicts
+
+    if total_conflicts == 0:
+        return best_colors, 0
+
+    # tabu[u][c] = itération jusqu'à laquelle il est interdit de colorer u avec c
+    tabu = [[0] * k for _ in range(n)]
+
+    # 2. Boucle de recherche Tabou
+    for iteration in range(1, max_iter + 1):
+        if not conflicts_set:
+            break  # Solution valide trouvée
+
+        best_move = None
+        best_gain = -float('inf')
+
+        # Évaluation de tous les moves (u, new_c) pour les sommets en conflit
+        for u in conflicts_set:
+            old_c = colors[u]
+            for new_c in range(k):
+                if new_c == old_c:
+                    continue
+                
+                # Gain = conflits supprimés - conflits créés
+                gain = gamma[u][old_c] - gamma[u][new_c]
+                
+                is_tabu = tabu[u][new_c] > iteration
+                # Critère d'aspiration : autoriser si ça bat le meilleur absolu
+                if is_tabu and (total_conflicts - gain) >= best_total_conflicts:
+                    continue
+                
+                if gain > best_gain:
+                    best_gain = gain
+                    best_move = (u, new_c, old_c)
+
+        # Si aucun move n'est possible (tous tabous et aucun n'aspire), 
+        # on force un mouvement aléatoire pour débloquer la recherche
+        if best_move is None:
+            u = rng.choice(list(conflicts_set))
+            old_c = colors[u]
+            available_c = [c for c in range(k) if c != old_c]
+            new_c = rng.choice(available_c)
+            best_gain = gamma[u][old_c] - gamma[u][new_c]
+            best_move = (u, new_c, old_c)
+
+        u, new_c, old_c = best_move
+
+        # 3. Appliquer le mouvement
+        colors[u] = new_c
+        total_conflicts -= best_gain
+
+        # Mettre à jour gamma pour les voisins
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            
+            # Mettre à jour l'ensemble des sommets en conflit
+            if gamma[v][colors[v]] == 0:
+                conflicts_set.discard(v)
+            else:
+                conflicts_set.add(v)
+
+        # Mettre à jour le statut de u
+        if gamma[u][new_c] == 0:
+            conflicts_set.discard(u)
+        else:
+            conflicts_set.add(u)
+
+        # 4. Mettre à jour la liste taboue (Tenure dynamique)
+        # L = floor(0.6 * |C|) + randint(0, 9)
+        tenure = int(0.6 * len(conflicts_set)) + rng.randint(0, 9)
+        # On interdit de revenir à old_c pour u
+        tabu[u][old_c] = iteration + tenure
+
+        # 5. Sauvegarder le meilleur état
+        if total_conflicts < best_total_conflicts:
+            best_total_conflicts = total_conflicts
+            best_colors = colors[:]
+            if best_total_conflicts == 0:
+                break
+
+    return best_colors, best_total_conflicts
+
+
+def tabucol_coloring(adj_matrix, k=None, max_iter=10000, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using the Tabucol algorithm.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if k is not None:
+        best_k = min(k, best_k)
+
+    if verbose:
+        print(f"  Tabucol: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  Tabucol: trying k = {current_k}")
+
+        colors, conflicts = _tabu_search(adj_list, current_k, max_iter, rng)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  Tabucol: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  Tabucol: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def tabucol_coloring_fixed_k(adj_list, k, max_iter=10000, seed=None, verbose=False):
+    """
+    Tabucol variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _tabu_search(adj_list, k, max_iter, rng)
+</file>
+
+<file path="welsh_powell.py">
+#!/usr/bin/env python3
+
+def welsh_powell_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Welsh-Powell algorithm.
+
+    Sorts vertices by decreasing degree, then applies greedy coloring
+    in that order. At each step, the vertex receives the smallest color
+    not used by its already colored neighbors.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Degrees of each vertex
+    degrees = [sum(row) for row in adj_matrix]
+
+    # Sort vertices by decreasing degree
+    order = sorted(range(n), key=lambda i: degrees[i], reverse=True)
+
+    colors = [-1] * n
+
+    for u in order:
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="z3_solver.py">
+#!/usr/bin/env python3
+"""
+Z3 SMT solver for Graph Coloring.
+Uses Z3 to find valid graph colorings via symbolic constraint solving.
+"""
+
+import z3
+
+
+def z3_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using Z3 SMT solver.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds (default: 60).
+    seed : int, optional
+        Random seed (not used by Z3, kept for API consistency).
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    edges = []
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+
+    best_k = None
+    best_colors = None
+
+    for k in range(1, greedy_k + 1):
+        solver = z3.Solver()
+        solver.set("timeout", int(time_limit * 1000))
+
+        colors = [z3.Int(f'c_{i}') for i in range(n)]
+
+        for c in colors:
+            solver.add(c >= 0, c < k)
+
+        for u, v in edges:
+            solver.add(colors[u] != colors[v])
+
+        if solver.check() == z3.sat:
+            model = solver.model()
+            solution = [model[colors[i]].as_long() for i in range(n)]
+            if best_k is None or k < best_k:
+                best_k = k
+                best_colors = solution
+                if k == 1 or (best_k is not None and k == best_k):
+                    break
+        elif solver.reason_unknown() == "unknown":
+            if verbose:
+                print(f"  Z3: Unknown result for k={k}")
+
+    if best_colors is None:
+        from .common import _verify_coloring
+        best_colors = [0] * n
+        best_k = greedy_k
+        if not _verify_coloring(adj_matrix, best_colors):
+            for i in range(n):
+                best_colors[i] = greedy_k - 1
+
+    return best_colors, best_k
+
+
+def z3_coloring_fixed_k(adj_matrix, k, time_limit=60, seed=None, verbose=False):
+    """
+    Z3 variant that tries to find a valid coloring with a fixed number of colors k.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    solver = z3.Solver()
+    solver.set("timeout", int(time_limit * 1000))
+
+    colors = [z3.Int(f'c_{i}') for i in range(n)]
+
+    for c in colors:
+        solver.add(c >= 0, c < k)
+
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                solver.add(colors[u] != colors[v])
+
+    if solver.check() == z3.sat:
+        model = solver.model()
+        solution = [model[colors[i]].as_long() for i in range(n)]
+        return solution, k
+    else:
+        return [0] * n, k
+</file>
+
+</files>
+</file>
+
+<file path="rlf.py">
+#!/usr/bin/env python3
+
+def rlf_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Recursive Largest First (RLF) algorithm.
+
+    Builds the color classes one by one. For each color, iteratively selects
+    the uncolored vertex with the most uncolored neighbors in the current class,
+    until no more vertices can be added.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    neighbors = [set(v for v in range(n) if adj_matrix[u][v] == 1) for u in range(n)]
+    uncolored = set(range(n))
+    current_color = 0
+
+    while uncolored:
+        # Current color class
+        color_class = []
+
+        # Candidates = uncolored vertices without neighbors in the current class
+        candidates = set(uncolored)
+
+        while candidates:
+            # Choose the vertex with the most uncolored neighbors (outside class)
+            best = max(candidates, key=lambda v: len(neighbors[v] & uncolored))
+            color_class.append(best)
+            candidates.discard(best)
+
+            # Remove neighbors of the chosen vertex from candidates
+            for w in neighbors[best]:
+                candidates.discard(w)
+
+        # Assign the current color
+        for v in color_class:
+            colors[v] = current_color
+            uncolored.discard(v)
+
+        current_color += 1
+
+    nb_colors = current_color
+    return colors, nb_colors
+</file>
+
+<file path="sa.py">
+#!/usr/bin/env python3
+"""
+Simulated Annealing for Graph Coloring.
+Version optimisée avec matrice gamma.
+"""
+
+import random
+import math
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _sa_search(adj_list, k, max_iter, initial_temp, cooling_rate, min_temp, rng):
+    """
+    Cœur du Recuit Simulé.
+    Évalue un mouvement en O(1) et met à jour la structure en O(deg(u)).
+    """
+    n = len(adj_list)
+    if k <= 1:
+        if all(len(neighbors) == 0 for neighbors in adj_list):
+            return [0] * n, 0
+        else:
+            return [0] * n, sum(len(neighbors) for neighbors in adj_list) // 2
+
+    # 1. Initialisation
+    colors = [rng.randrange(k) for _ in range(n)]
+    
+    # gamma[u][c] = nombre de voisins de u colorés avec c
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    # Calcul des conflits initiaux
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2
+
+    best_colors = colors[:]
+    best_total_conflicts = total_conflicts
+
+    if total_conflicts == 0:
+        return best_colors, 0
+
+    T = initial_temp
+    
+    # Convertir set en list pour un accès aléatoire O(1) rapide
+    conflicts_list = list(conflicts_set)
+
+    # 2. Boucle principale du Recuit
+    for iteration in range(1, max_iter + 1):
+        if total_conflicts == 0:
+            break
+            
+        # Refroidissement
+        if T > min_temp:
+            T *= cooling_rate
+        else:
+            T = min_temp
+
+        # Choisir un sommet aléatoire en conflit
+        u = rng.choice(conflicts_list)
+        old_c = colors[u]
+        
+        # Choisir une nouvelle couleur aléatoire
+        available_c = [c for c in range(k) if c != old_c]
+        new_c = rng.choice(available_c)
+
+        # Delta E = variation du nombre de conflits
+        delta_E = gamma[u][new_c] - gamma[u][old_c]
+
+        # Critère d'acceptation de Metropolis
+        accept = False
+        if delta_E <= 0:
+            accept = True
+        else:
+            # Probabilité d'accepter un mouvement dégradant
+            prob = math.exp(-delta_E / T)
+            if rng.random() < prob:
+                accept = True
+
+        if not accept:
+            continue
+
+        # 3. Appliquer le mouvement
+        colors[u] = new_c
+        total_conflicts += delta_E
+
+        # Mise à jour de gamma et des conflits pour les voisins
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            
+            # Mettre à jour le statut de conflit du voisin v
+            if gamma[v][colors[v]] == 0:
+                if v in conflicts_set:
+                    conflicts_set.discard(v)
+            else:
+                if v not in conflicts_set:
+                    conflicts_set.add(v)
+
+        # Mettre à jour le statut de u
+        if gamma[u][new_c] == 0:
+            conflicts_set.discard(u)
+        else:
+            conflicts_set.add(u)
+            
+        # Synchroniser la liste
+        conflicts_list = list(conflicts_set)
+
+        # 4. Sauvegarder le meilleur état
+        if total_conflicts < best_total_conflicts:
+            best_total_conflicts = total_conflicts
+            best_colors = colors[:]
+            if best_total_conflicts == 0:
+                break
+
+    return best_colors, best_total_conflicts
+
+
+def sa_coloring(adj_matrix, max_iter=20000, initial_temp=10.0, cooling_rate=0.999, 
+                min_temp=0.01, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using Simulated Annealing.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    Essaie de réduire k itérativement comme pour Tabucol.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if verbose:
+        print(f"  SA: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  SA: trying k = {current_k}")
+
+        colors, conflicts = _sa_search(adj_list, current_k, max_iter, 
+                                       initial_temp, cooling_rate, min_temp, rng)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  SA: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  SA: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def sa_coloring_fixed_k(adj_list, k, max_iter=20000, initial_temp=10.0, 
+                        cooling_rate=0.999, min_temp=0.01, seed=None, verbose=False):
+    """
+    SA variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _sa_search(adj_list, k, max_iter, initial_temp, cooling_rate, min_temp, rng)
+</file>
+
+<file path="sat.py">
+#!/usr/bin/env python3
+"""
+SAT solver for Graph Coloring via pysat.
+Encodes graph coloring as a SAT problem and uses pysat solvers.
+"""
+
+import time
+import threading
+from pysat.solvers import Glucose3
+
+
+def sat_coloring_sat(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using a SAT solver via pysat.
+
+    Uses binary search on k instead of linear search for efficiency.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds.
+    seed : int, optional
+        Random seed (not used by pysat, kept for API consistency).
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    edges = []
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+
+    best_k = None
+    best_colors = None
+
+    def try_solve(k, time_budget):
+        """Try to solve for k colors within time_budget seconds."""
+        clauses = []
+
+        # Each vertex must have at least one color
+        for v in range(n):
+            clause = [v * k + c + 1 for c in range(k)]
+            clauses.append(clause)
+
+        # Each vertex cannot have more than one color
+        for v in range(n):
+            for c1 in range(k):
+                for c2 in range(c1 + 1, k):
+                    clauses.append([-(v * k + c1 + 1), -(v * k + c2 + 1)])
+
+        # Adjacent vertices cannot have the same color
+        for u, v in edges:
+            for c in range(k):
+                clauses.append([-(u * k + c + 1), -(v * k + c + 1)])
+
+        result = [None]
+        exception = [None]
+        
+        def solve_thread():
+            try:
+                with Glucose3(bootstrap_with=clauses) as solver:
+                    if solver.solve():
+                        model = solver.get_model()
+                        solution = [-1] * n
+                        for lit in model:
+                            if lit > 0:
+                                var_idx = (lit - 1) % k
+                                v = (lit - 1) // k
+                                solution[v] = var_idx
+                        if -1 not in solution:
+                            result[0] = solution
+                            return
+                result[0] = None
+            except Exception as e:
+                exception[0] = e
+
+        t = threading.Thread(target=solve_thread)
+        t.daemon = True
+        t.start()
+        t.join(timeout=time_budget)
+        
+        if t.is_alive():
+            # Timeout - can't easily stop pysat, just return None
+            return "timeout"
+        if exception[0]:
+            if verbose:
+                print(f"  SAT: Error with k={k}: {exception[0]}")
+            return False
+        return result[0]
+
+    # Binary search on k
+    low, high = 1, greedy_k
+    start_time = time.time()
+    
+    while low <= high:
+        elapsed = time.time() - start_time
+        remaining = time_limit - elapsed
+        if remaining <= 0:
+            if verbose:
+                print(f"  SAT: Time limit reached")
+            break
+            
+        k = (low + high) // 2
+        if verbose:
+            print(f"  SAT: trying k={k} (remaining: {remaining:.1f}s)")
+        
+        # Give at most 10s per attempt
+        attempt_time = min(remaining, 10.0)
+        result = try_solve(k, attempt_time)
+        
+        if result == "timeout":
+            if verbose:
+                print(f"  SAT: timeout at k={k}")
+            # Timeout - treat as UNSAT, try higher
+            low = k + 1
+        elif result is not False:
+            # SAT or solution found
+            if result is not None:
+                best_k = k
+                best_colors = result
+                if verbose:
+                    print(f"  SAT: found coloring with k={k}")
+                high = k - 1
+            else:
+                low = k + 1
+        else:
+            # Error
+            low = k + 1
+
+    # Fallback
+    if best_colors is None:
+        best_colors = [0] * n
+        best_k = n
+
+    return best_colors, best_k
+
+
+def sat_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using SAT encoding with pysat solvers.
+    """
+    return sat_coloring_sat(adj_matrix, time_limit, seed, verbose)
+</file>
+
+<file path="scip.py">
+#!/usr/bin/env python3
+"""
+SCIP solver for Graph Coloring via pyscipopt.
+Uses SCIP MIP solver for graph coloring optimization.
+"""
+
+import pyscipopt
+
+
+def scip_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using SCIP MIP solver.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds (default: 60).
+    seed : int, optional
+        Random seed for SCIP.
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    edges = []
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+
+    best_k = None
+    best_colors = None
+
+    for k in range(1, greedy_k + 1):
+        model = pyscipopt.Model()
+        if verbose:
+            model.setParam('display/verblevel', 5)
+        else:
+            model.setParam('display/verblevel', 0)
+        
+        if seed is not None:
+            model.setParam('randomization/seed', seed)
+        model.setParam('limits/time', min(time_limit / max(1, greedy_k), 30))
+        model.setParam('limits/nodes', 10000)
+        model.setParam('limits/gap', 0.01)
+
+        x = {}
+        for v in range(n):
+            for c in range(k):
+                x[v, c] = model.addVar(vtype='BINARY', name=f'x_{v}_{c}')
+
+        for v in range(n):
+            model.addCons(pyscipopt.quicksum(x[v, c] for c in range(k)) == 1)
+
+        for u, v in edges:
+            for c in range(k):
+                model.addCons(x[u, c] + x[v, c] <= 1)
+
+        model.optimize()
+
+        status = model.getStatus()
+        if status in ['optimal', 'feasible']:
+            solution = [-1] * n
+            for v in range(n):
+                for c in range(k):
+                    if model.getVal(x[v, c]) > 0.5:
+                        solution[v] = c
+            
+            if -1 not in solution:
+                if best_k is None or k < best_k:
+                    best_k = k
+                    best_colors = solution
+                    if status == 'optimal':
+                        break
+
+        model.freeProb()
+
+    if best_colors is None:
+        best_colors = [0] * n
+        best_k = n
+
+    return best_colors, best_k
+
+
+def scip_coloring_fixed_k(adj_matrix, k, time_limit=60, seed=None, verbose=False):
+    """
+    SCIP variant that tries to find a valid coloring with a fixed number of colors k.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    model = pyscipopt.Model()
+    if verbose:
+        model.setParam('display/verblevel', 5)
+    else:
+        model.setParam('display/verblevel', 0)
+    
+    if seed is not None:
+        model.setParam('randomization/seed', seed)
+    model.setParam('limits/time', time_limit)
+
+    x = {}
+    for v in range(n):
+        for c in range(k):
+            x[v, c] = model.addVar(vtype='BINARY', name=f'x_{v}_{c}')
+
+    for v in range(n):
+        model.addCons(pyscipopt.quicksum(x[v, c] for c in range(k)) == 1)
+
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                for c in range(k):
+                    model.addCons(x[u, c] + x[v, c] <= 1)
+
+    model.optimize()
+
+    status = model.getStatus()
+    if status in ['optimal', 'feasible']:
+        solution = [-1] * n
+        for v in range(n):
+            for c in range(k):
+                if model.getVal(x[v, c]) > 0.5:
+                    solution[v] = c
+        return solution, k
+    else:
+        from .common import _greedy_coloring, _matrix_to_adj_list
+        adj_list = _matrix_to_adj_list(adj_matrix)
+        _, greedy_k = _greedy_coloring(adj_list)
+        return [0] * n, greedy_k
+</file>
+
+<file path="smallest_degree_last.py">
+#!/usr/bin/env python3
+
+def smallest_degree_last_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Smallest Degree Last (SDL) algorithm.
+
+    Iteratively removes the vertex with the smallest degree in the current
+    graph, stacks the vertices as it goes, then colors them in the reverse
+    order of their removal (last removed = first colored) with standard greedy
+    coloring.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Copy the matrix to modify it
+    mat = [row[:] for row in adj_matrix]
+    # Current degrees
+    deg = [sum(row) for row in mat]
+    # Marked as removed
+    removed = [False] * n
+    # Removal order (stack)
+    stack = []
+
+    for _ in range(n):
+        # Find the non-removed vertex with the smallest degree
+        u = min((i for i in range(n) if not removed[i]), key=lambda i: deg[i])
+        stack.append(u)
+        removed[u] = True
+
+        # Decrement the degrees of neighbors still present
+        for v in range(n):
+            if mat[u][v] == 1 and not removed[v]:
+                deg[v] -= 1
+
+    # Color in reverse order of the stack
+    colors = [-1] * n
+
+    while stack:
+        u = stack.pop()
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="tabu.py">
+#!/usr/bin/env python3
+"""
+Tabucol — Tabu Search for Graph Coloring (Hertz & de Werra, 1987).
+Version optimisée.
+"""
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _tabu_search(adj_list, k, max_iter, rng):
+    """
+    Cœur du Tabucol optimisé.
+    Utilise la matrice gamma pour évaluer les moves en O(1) et les appliquer en O(deg(u)).
+    """
+    n = len(adj_list)
+    if k <= 1:
+        # Cas trivial : k=1 n'est valide que s'il n'y a aucune arête
+        if all(len(neighbors) == 0 for neighbors in adj_list):
+            return [0] * n, 0
+        else:
+            return [0] * n, sum(len(neighbors) for neighbors in adj_list) // 2
+
+    # 1. Initialisation
+    colors = [rng.randrange(k) for _ in range(n)]
+    
+    # gamma[u][c] = nombre de voisins de u colorés avec c
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    # Calcul des conflits initiaux
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2  # Chaque arête en conflit est comptée deux fois
+
+    best_colors = colors[:]
+    best_total_conflicts = total_conflicts
+
+    if total_conflicts == 0:
+        return best_colors, 0
+
+    # tabu[u][c] = itération jusqu'à laquelle il est interdit de colorer u avec c
+    tabu = [[0] * k for _ in range(n)]
+
+    # 2. Boucle de recherche Tabou
+    for iteration in range(1, max_iter + 1):
+        if not conflicts_set:
+            break  # Solution valide trouvée
+
+        best_move = None
+        best_gain = -float('inf')
+
+        # Évaluation de tous les moves (u, new_c) pour les sommets en conflit
+        for u in conflicts_set:
+            old_c = colors[u]
+            for new_c in range(k):
+                if new_c == old_c:
+                    continue
+                
+                # Gain = conflits supprimés - conflits créés
+                gain = gamma[u][old_c] - gamma[u][new_c]
+                
+                is_tabu = tabu[u][new_c] > iteration
+                # Critère d'aspiration : autoriser si ça bat le meilleur absolu
+                if is_tabu and (total_conflicts - gain) >= best_total_conflicts:
+                    continue
+                
+                if gain > best_gain:
+                    best_gain = gain
+                    best_move = (u, new_c, old_c)
+
+        # Si aucun move n'est possible (tous tabous et aucun n'aspire), 
+        # on force un mouvement aléatoire pour débloquer la recherche
+        if best_move is None:
+            u = rng.choice(list(conflicts_set))
+            old_c = colors[u]
+            available_c = [c for c in range(k) if c != old_c]
+            new_c = rng.choice(available_c)
+            best_gain = gamma[u][old_c] - gamma[u][new_c]
+            best_move = (u, new_c, old_c)
+
+        u, new_c, old_c = best_move
+
+        # 3. Appliquer le mouvement
+        colors[u] = new_c
+        total_conflicts -= best_gain
+
+        # Mettre à jour gamma pour les voisins
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            
+            # Mettre à jour l'ensemble des sommets en conflit
+            if gamma[v][colors[v]] == 0:
+                conflicts_set.discard(v)
+            else:
+                conflicts_set.add(v)
+
+        # Mettre à jour le statut de u
+        if gamma[u][new_c] == 0:
+            conflicts_set.discard(u)
+        else:
+            conflicts_set.add(u)
+
+        # 4. Mettre à jour la liste taboue (Tenure dynamique)
+        # L = floor(0.6 * |C|) + randint(0, 9)
+        tenure = int(0.6 * len(conflicts_set)) + rng.randint(0, 9)
+        # On interdit de revenir à old_c pour u
+        tabu[u][old_c] = iteration + tenure
+
+        # 5. Sauvegarder le meilleur état
+        if total_conflicts < best_total_conflicts:
+            best_total_conflicts = total_conflicts
+            best_colors = colors[:]
+            if best_total_conflicts == 0:
+                break
+
+    return best_colors, best_total_conflicts
+
+
+def tabucol_coloring(adj_matrix, k=None, max_iter=10000, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using the Tabucol algorithm.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if k is not None:
+        best_k = min(k, best_k)
+
+    if verbose:
+        print(f"  Tabucol: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  Tabucol: trying k = {current_k}")
+
+        colors, conflicts = _tabu_search(adj_list, current_k, max_iter, rng)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  Tabucol: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  Tabucol: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def tabucol_coloring_fixed_k(adj_list, k, max_iter=10000, seed=None, verbose=False):
+    """
+    Tabucol variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _tabu_search(adj_list, k, max_iter, rng)
+</file>
+
+<file path="welsh_powell.py">
+#!/usr/bin/env python3
+
+def welsh_powell_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Welsh-Powell algorithm.
+
+    Sorts vertices by decreasing degree, then applies greedy coloring
+    in that order. At each step, the vertex receives the smallest color
+    not used by its already colored neighbors.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Degrees of each vertex
+    degrees = [sum(row) for row in adj_matrix]
+
+    # Sort vertices by decreasing degree
+    order = sorted(range(n), key=lambda i: degrees[i], reverse=True)
+
+    colors = [-1] * n
+
+    for u in order:
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="z3_solver.py">
+#!/usr/bin/env python3
+"""
+Z3 SMT solver for Graph Coloring.
+Uses Z3 to find valid graph colorings via symbolic constraint solving.
+"""
+
+import z3
+
+
+def z3_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using Z3 SMT solver.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+    time_limit : float, optional
+        Time limit in seconds (default: 60).
+    seed : int, optional
+        Random seed (not used by Z3, kept for API consistency).
+    verbose : bool, optional
+        Print progress information.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    edges = []
+    for u in range(n):
+        for v in range(n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    _, greedy_k = _greedy_coloring(adj_list)
+
+    best_k = None
+    best_colors = None
+
+    for k in range(1, greedy_k + 1):
+        solver = z3.Solver()
+        solver.set("timeout", int(time_limit * 1000))
+
+        colors = [z3.Int(f'c_{i}') for i in range(n)]
+
+        for c in colors:
+            solver.add(c >= 0, c < k)
+
+        for u, v in edges:
+            solver.add(colors[u] != colors[v])
+
+        if solver.check() == z3.sat:
+            model = solver.model()
+            solution = [model[colors[i]].as_long() for i in range(n)]
+            if best_k is None or k < best_k:
+                best_k = k
+                best_colors = solution
+                if k == 1 or (best_k is not None and k == best_k):
+                    break
+        elif solver.reason_unknown() == "unknown":
+            if verbose:
+                print(f"  Z3: Unknown result for k={k}")
+
+    if best_colors is None:
+        from .common import _verify_coloring
+        best_colors = [0] * n
+        best_k = greedy_k
+        if not _verify_coloring(adj_matrix, best_colors):
+            for i in range(n):
+                best_colors[i] = greedy_k - 1
+
+    return best_colors, best_k
+
+
+def z3_coloring_fixed_k(adj_matrix, k, time_limit=60, seed=None, verbose=False):
+    """
+    Z3 variant that tries to find a valid coloring with a fixed number of colors k.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    solver = z3.Solver()
+    solver.set("timeout", int(time_limit * 1000))
+
+    colors = [z3.Int(f'c_{i}') for i in range(n)]
+
+    for c in colors:
+        solver.add(c >= 0, c < k)
+
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                solver.add(colors[u] != colors[v])
+
+    if solver.check() == z3.sat:
+        model = solver.model()
+        solution = [model[colors[i]].as_long() for i in range(n)]
+        return solution, k
+    else:
+        return [0] * n, k
+</file>
+
+</files>
+</file>
+
+<file path="rlf.py">
+#!/usr/bin/env python3
+
+def rlf_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Recursive Largest First (RLF) algorithm.
+
+    Builds the color classes one by one. For each color, iteratively selects
+    the uncolored vertex with the most uncolored neighbors in the current class,
+    until no more vertices can be added.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    colors = [-1] * n
+    neighbors = [set(v for v in range(n) if adj_matrix[u][v] == 1) for u in range(n)]
+    uncolored = set(range(n))
+    current_color = 0
+
+    while uncolored:
+        # Current color class
+        color_class = []
+
+        # Candidates = uncolored vertices without neighbors in the current class
+        candidates = set(uncolored)
+
+        while candidates:
+            # Choose the vertex with the most uncolored neighbors (outside class)
+            best = max(candidates, key=lambda v: len(neighbors[v] & uncolored))
+            color_class.append(best)
+            candidates.discard(best)
+
+            # Remove neighbors of the chosen vertex from candidates
+            for w in neighbors[best]:
+                candidates.discard(w)
+
+        # Assign the current color
+        for v in color_class:
+            colors[v] = current_color
+            uncolored.discard(v)
+
+        current_color += 1
+
+    nb_colors = current_color
+    return colors, nb_colors
+</file>
+
+<file path="sa.py">
+#!/usr/bin/env python3
+"""
+Simulated Annealing for Graph Coloring.
+Version optimisée avec matrice gamma.
+"""
+
+import random
+import math
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _sa_search(adj_list, k, max_iter, initial_temp, cooling_rate, min_temp, rng):
+    """
+    Cœur du Recuit Simulé.
+    Évalue un mouvement en O(1) et met à jour la structure en O(deg(u)).
+    """
+    n = len(adj_list)
+    if k <= 1:
+        if all(len(neighbors) == 0 for neighbors in adj_list):
+            return [0] * n, 0
+        else:
+            return [0] * n, sum(len(neighbors) for neighbors in adj_list) // 2
+
+    # 1. Initialisation
+    colors = [rng.randrange(k) for _ in range(n)]
+    
+    # gamma[u][c] = nombre de voisins de u colorés avec c
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    # Calcul des conflits initiaux
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2
+
+    best_colors = colors[:]
+    best_total_conflicts = total_conflicts
+
+    if total_conflicts == 0:
+        return best_colors, 0
+
+    T = initial_temp
+    
+    # Convertir set en list pour un accès aléatoire O(1) rapide
+    conflicts_list = list(conflicts_set)
+
+    # 2. Boucle principale du Recuit
+    for iteration in range(1, max_iter + 1):
+        if total_conflicts == 0:
+            break
+            
+        # Refroidissement
+        if T > min_temp:
+            T *= cooling_rate
+        else:
+            T = min_temp
+
+        # Choisir un sommet aléatoire en conflit
+        u = rng.choice(conflicts_list)
+        old_c = colors[u]
+        
+        # Choisir une nouvelle couleur aléatoire
+        available_c = [c for c in range(k) if c != old_c]
+        new_c = rng.choice(available_c)
+
+        # Delta E = variation du nombre de conflits
+        delta_E = gamma[u][new_c] - gamma[u][old_c]
+
+        # Critère d'acceptation de Metropolis
+        accept = False
+        if delta_E <= 0:
+            accept = True
+        else:
+            # Probabilité d'accepter un mouvement dégradant
+            prob = math.exp(-delta_E / T)
+            if rng.random() < prob:
+                accept = True
+
+        if not accept:
+            continue
+
+        # 3. Appliquer le mouvement
+        colors[u] = new_c
+        total_conflicts += delta_E
+
+        # Mise à jour de gamma et des conflits pour les voisins
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            
+            # Mettre à jour le statut de conflit du voisin v
+            if gamma[v][colors[v]] == 0:
+                if v in conflicts_set:
+                    conflicts_set.discard(v)
+            else:
+                if v not in conflicts_set:
+                    conflicts_set.add(v)
+
+        # Mettre à jour le statut de u
+        if gamma[u][new_c] == 0:
+            conflicts_set.discard(u)
+        else:
+            conflicts_set.add(u)
+            
+        # Synchroniser la liste
+        conflicts_list = list(conflicts_set)
+
+        # 4. Sauvegarder le meilleur état
+        if total_conflicts < best_total_conflicts:
+            best_total_conflicts = total_conflicts
+            best_colors = colors[:]
+            if best_total_conflicts == 0:
+                break
+
+    return best_colors, best_total_conflicts
+
+
+def sa_coloring(adj_matrix, max_iter=20000, initial_temp=10.0, cooling_rate=0.999, 
+                min_temp=0.01, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using Simulated Annealing.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    Essaie de réduire k itérativement comme pour Tabucol.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if verbose:
+        print(f"  SA: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  SA: trying k = {current_k}")
+
+        colors, conflicts = _sa_search(adj_list, current_k, max_iter, 
+                                       initial_temp, cooling_rate, min_temp, rng)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  SA: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  SA: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def sa_coloring_fixed_k(adj_list, k, max_iter=20000, initial_temp=10.0, 
+                        cooling_rate=0.999, min_temp=0.01, seed=None, verbose=False):
+    """
+    SA variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _sa_search(adj_list, k, max_iter, initial_temp, cooling_rate, min_temp, rng)
+</file>
+
+<file path="sat.py">
+#!/usr/bin/env python3
+"""
+SAT solver for Graph Coloring via pysat.
+"""
+
+from pysat.solvers import Glucose3
+
+
+def sat_coloring(adj_matrix, time_limit=60, seed=None, verbose=False):
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    edges = []
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                edges.append((u, v))
+
+    from .common import _greedy_coloring, _matrix_to_adj_list
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    greedy_colors, greedy_k = _greedy_coloring(adj_list)
+    
+    best_colors = greedy_colors
+    best_k = greedy_k
+
+    # Recherche descendante : on essaie de réduire k à partir de greedy_k - 1
+    for k in range(greedy_k - 1, 0, -1):
+        if verbose:
+            print(f"  SAT: trying k={k}")
+            
+        clauses = []
+
+        # Chaque sommet a au moins une couleur
+        for v in range(n):
+            clauses.append([v * k + c + 1 for c in range(k)])
+
+        # Chaque sommet a au plus une couleur
+        for v in range(n):
+            for c1 in range(k):
+                for c2 in range(c1 + 1, k):
+                    clauses.append([-(v * k + c1 + 1), -(v * k + c2 + 1)])
+
+        # Sommets adjacents de couleurs différentes
+        for u, v in edges:
+            for c in range(k):
+                clauses.append([-(u * k + c + 1), -(v * k + c + 1)])
+
+        # Glucose3 n'a pas de timeout natif, mais compare.py tuera le process à 70s
+        with Glucose3(bootstrap_with=clauses) as solver:
+            if solver.solve():
+                model = solver.get_model()
+                solution = [-1] * n
+                for lit in model:
+                    if lit > 0:
+                        var_idx = (lit - 1) % k
+                        v_idx = (lit - 1) // k
+                        solution[v_idx] = var_idx
+                
+                if -1 not in solution:
+                    best_k = k
+                    best_colors = solution
+            else:
+                # UNSAT : on ne peut pas colorier avec k couleurs, on s'arrête
+                break
+
+    return best_colors, best_k
+</file>
+
+<file path="smallest_degree_last.py">
+#!/usr/bin/env python3
+
+def smallest_degree_last_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Smallest Degree Last (SDL) algorithm.
+
+    Iteratively removes the vertex with the smallest degree in the current
+    graph, stacks the vertices as it goes, then colors them in the reverse
+    order of their removal (last removed = first colored) with standard greedy
+    coloring.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Copy the matrix to modify it
+    mat = [row[:] for row in adj_matrix]
+    # Current degrees
+    deg = [sum(row) for row in mat]
+    # Marked as removed
+    removed = [False] * n
+    # Removal order (stack)
+    stack = []
+
+    for _ in range(n):
+        # Find the non-removed vertex with the smallest degree
+        u = min((i for i in range(n) if not removed[i]), key=lambda i: deg[i])
+        stack.append(u)
+        removed[u] = True
+
+        # Decrement the degrees of neighbors still present
+        for v in range(n):
+            if mat[u][v] == 1 and not removed[v]:
+                deg[v] -= 1
+
+    # Color in reverse order of the stack
+    colors = [-1] * n
+
+    while stack:
+        u = stack.pop()
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+<file path="tabu.py">
+#!/usr/bin/env python3
+"""
+Tabucol — Tabu Search for Graph Coloring (Hertz & de Werra, 1987).
+Version optimisée.
+"""
+
+import random
+
+def _matrix_to_adj_list(adj_matrix):
+    """Utilitaire de conversion si vous avez encore des matrices."""
+    n = len(adj_matrix)
+    adj_list = [[] for _ in range(n)]
+    for u in range(n):
+        for v in range(u + 1, n):
+            if adj_matrix[u][v]:
+                adj_list[u].append(v)
+                adj_list[v].append(u)
+    return adj_list
+
+
+def _greedy_coloring(adj_list):
+    """Coloration gloutonne en O(n + m)."""
+    n = len(adj_list)
+    colors = [-1] * n
+    for u in range(n):
+        used = {colors[v] for v in adj_list[u] if colors[v] != -1}
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+    return colors, max(colors) + 1 if colors else 0
+
+
+def _tabu_search(adj_list, k, max_iter, rng):
+    """
+    Cœur du Tabucol optimisé.
+    Utilise la matrice gamma pour évaluer les moves en O(1) et les appliquer en O(deg(u)).
+    """
+    n = len(adj_list)
+    if k <= 1:
+        # Cas trivial : k=1 n'est valide que s'il n'y a aucune arête
+        if all(len(neighbors) == 0 for neighbors in adj_list):
+            return [0] * n, 0
+        else:
+            return [0] * n, sum(len(neighbors) for neighbors in adj_list) // 2
+
+    # 1. Initialisation
+    colors = [rng.randrange(k) for _ in range(n)]
+    
+    # gamma[u][c] = nombre de voisins de u colorés avec c
+    gamma = [[0] * k for _ in range(n)]
+    for u in range(n):
+        cu = colors[u]
+        for v in adj_list[u]:
+            gamma[u][colors[v]] += 1
+
+    # Calcul des conflits initiaux
+    conflicts_set = set()
+    total_conflicts = 0
+    for u in range(n):
+        if gamma[u][colors[u]] > 0:
+            conflicts_set.add(u)
+            total_conflicts += gamma[u][colors[u]]
+    total_conflicts //= 2  # Chaque arête en conflit est comptée deux fois
+
+    best_colors = colors[:]
+    best_total_conflicts = total_conflicts
+
+    if total_conflicts == 0:
+        return best_colors, 0
+
+    # tabu[u][c] = itération jusqu'à laquelle il est interdit de colorer u avec c
+    tabu = [[0] * k for _ in range(n)]
+
+    # 2. Boucle de recherche Tabou
+    for iteration in range(1, max_iter + 1):
+        if not conflicts_set:
+            break  # Solution valide trouvée
+
+        best_move = None
+        best_gain = -float('inf')
+
+        # Évaluation de tous les moves (u, new_c) pour les sommets en conflit
+        for u in conflicts_set:
+            old_c = colors[u]
+            for new_c in range(k):
+                if new_c == old_c:
+                    continue
+                
+                # Gain = conflits supprimés - conflits créés
+                gain = gamma[u][old_c] - gamma[u][new_c]
+                
+                is_tabu = tabu[u][new_c] > iteration
+                # Critère d'aspiration : autoriser si ça bat le meilleur absolu
+                if is_tabu and (total_conflicts - gain) >= best_total_conflicts:
+                    continue
+                
+                if gain > best_gain:
+                    best_gain = gain
+                    best_move = (u, new_c, old_c)
+
+        # Si aucun move n'est possible (tous tabous et aucun n'aspire), 
+        # on force un mouvement aléatoire pour débloquer la recherche
+        if best_move is None:
+            u = rng.choice(list(conflicts_set))
+            old_c = colors[u]
+            available_c = [c for c in range(k) if c != old_c]
+            new_c = rng.choice(available_c)
+            best_gain = gamma[u][old_c] - gamma[u][new_c]
+            best_move = (u, new_c, old_c)
+
+        u, new_c, old_c = best_move
+
+        # 3. Appliquer le mouvement
+        colors[u] = new_c
+        total_conflicts -= best_gain
+
+        # Mettre à jour gamma pour les voisins
+        for v in adj_list[u]:
+            gamma[v][old_c] -= 1
+            gamma[v][new_c] += 1
+            
+            # Mettre à jour l'ensemble des sommets en conflit
+            if gamma[v][colors[v]] == 0:
+                conflicts_set.discard(v)
+            else:
+                conflicts_set.add(v)
+
+        # Mettre à jour le statut de u
+        if gamma[u][new_c] == 0:
+            conflicts_set.discard(u)
+        else:
+            conflicts_set.add(u)
+
+        # 4. Mettre à jour la liste taboue (Tenure dynamique)
+        # L = floor(0.6 * |C|) + randint(0, 9)
+        tenure = int(0.6 * len(conflicts_set)) + rng.randint(0, 9)
+        # On interdit de revenir à old_c pour u
+        tabu[u][old_c] = iteration + tenure
+
+        # 5. Sauvegarder le meilleur état
+        if total_conflicts < best_total_conflicts:
+            best_total_conflicts = total_conflicts
+            best_colors = colors[:]
+            if best_total_conflicts == 0:
+                break
+
+    return best_colors, best_total_conflicts
+
+
+def tabucol_coloring(adj_matrix, k=None, max_iter=10000, seed=None, verbose=False):
+    """
+    Colors the vertices of a graph using the Tabucol algorithm.
+    Prend une matrice d'adjacence en entrée (comme les autres algorithmes).
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Convertir la matrice d'adjacence en liste d'adjacence
+    adj_list = _matrix_to_adj_list(adj_matrix)
+    
+    rng = random.Random(seed)
+    best_colors, best_k = _greedy_coloring(adj_list)
+
+    if k is not None:
+        best_k = min(k, best_k)
+
+    if verbose:
+        print(f"  Tabucol: starting from k = {best_k} (greedy upper bound)")
+
+    current_k = best_k - 1
+    while current_k >= 1:
+        if verbose:
+            print(f"  Tabucol: trying k = {current_k}")
+
+        colors, conflicts = _tabu_search(adj_list, current_k, max_iter, rng)
+
+        if conflicts == 0:
+            best_colors = colors
+            best_k = current_k
+            if verbose:
+                print(f"  Tabucol: found valid coloring with k = {current_k}")
+            current_k -= 1
+        else:
+            if verbose:
+                print(f"  Tabucol: no valid coloring with k = {current_k}, stopping")
+            break
+
+    return best_colors, best_k
+
+
+def tabucol_coloring_fixed_k(adj_list, k, max_iter=10000, seed=None, verbose=False):
+    """
+    Tabucol variant that tries to find a valid coloring with a *fixed* number of colors k.
+    """
+    n = len(adj_list)
+    if n == 0:
+        return [], 0
+
+    rng = random.Random(seed)
+    return _tabu_search(adj_list, k, max_iter, rng)
+</file>
+
+<file path="welsh_powell.py">
+#!/usr/bin/env python3
+
+def welsh_powell_coloring(adj_matrix):
+    """
+    Colors the vertices of a graph using the Welsh-Powell algorithm.
+
+    Sorts vertices by decreasing degree, then applies greedy coloring
+    in that order. At each step, the vertex receives the smallest color
+    not used by its already colored neighbors.
+
+    Parameters
+    ----------
+    adj_matrix : list[list[int]]
+        Symmetric n x n adjacency matrix, zero diagonal.
+
+    Returns
+    -------
+    colors : list[int]
+        List of size n, color assigned to each vertex.
+    nb_colors : int
+        Number of colors used.
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return [], 0
+
+    # Degrees of each vertex
+    degrees = [sum(row) for row in adj_matrix]
+
+    # Sort vertices by decreasing degree
+    order = sorted(range(n), key=lambda i: degrees[i], reverse=True)
+
+    colors = [-1] * n
+
+    for u in order:
+        used = set()
+        for v in range(n):
+            if adj_matrix[u][v] == 1 and colors[v] != -1:
+                used.add(colors[v])
+
+        c = 0
+        while c in used:
+            c += 1
+        colors[u] = c
+
+    nb_colors = max(colors) + 1
+
+    return colors, nb_colors
+</file>
+
+</files>

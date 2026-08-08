@@ -59,9 +59,8 @@ def main() -> None:
             print(f"[skip] {entry}/ : pas de stats.html")
             continue
 
-        # 3. Copie avec préfixe = nombre de sommets
-        prefix = extract_vertex_count(entry)
-        dest_name = f"{prefix}_stats.html"
+        # 3. Copie avec préfixe = nom complet du sous-dossier
+        dest_name = f"{entry}_stats.html"
         dest_path = os.path.join(report_dir, dest_name)
 
         shutil.copy2(stats_path, dest_path)

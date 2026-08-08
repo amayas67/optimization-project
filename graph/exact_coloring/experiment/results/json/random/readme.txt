@@ -121,24 +121,34 @@ short description of each file and how to tweak it when you need to.
       - copy_optimal_union.bat     (Windows)
       - copy_non_optimal_union.bat (Windows)
 
+  In the "union" panel you can set BOTH paths directly in the interface:
+      - "Répertoire source des fichiers JSON"  -> where the JSON files live,
+      - "Répertoire destination de la copie"   -> where the files will be
+        copied. Leave it empty to copy into the current directory.
+
   Each generated script contains a SOURCE_DIR variable (the folder where the
-  JSON files live) and copies the selected files into the CURRENT directory
-  (the folder where you run the script). You can freely edit the generated
+  JSON files live) and, if a destination was entered, a DEST_DIR variable
+  (the folder where the files will be copied). The script creates the
+  destination folder if it does not exist. You can freely edit the generated
   .sh / .bat file before running it:
       - change SOURCE_DIR to point to another source folder,
-      - run the script from (or cd into) the destination folder you want,
-      - or edit the copy commands directly to change the destination.
+      - change DEST_DIR to point to another destination folder,
+      - or edit the copy commands directly.
 
-  Example (bash):
+  Example (bash, with destination):
       SOURCE_DIR="/home/amayas/Downloads/projet/optimization-project/graph/exact_coloring/experiment/results/json/random/60_vertices"
+      DEST_DIR="/home/amayas/Downloads/projet/optimization-project/graph/exact_coloring/experiment/results/json/random/selected"
+      mkdir -p "$DEST_DIR"
       for id in 000001 000002 000003; do
-          cp "$SOURCE_DIR/$id.json" .
+          cp "$SOURCE_DIR/$id.json" "$DEST_DIR/"
       done
 
-  Example (Windows .bat):
+  Example (Windows .bat, with destination):
       set "SOURCE_DIR=C:\path\to\json\folder"
-      copy "%SOURCE_DIR%\000001.json" .
-      copy "%SOURCE_DIR%\000002.json" .
+      set "DEST_DIR=C:\path\to\destination\folder"
+      if not exist "%DEST_DIR%" mkdir "%DEST_DIR%"
+      copy "%SOURCE_DIR%\000001.json" "%DEST_DIR%\"
+      copy "%SOURCE_DIR%\000002.json" "%DEST_DIR%\"
 
 --------------------------------------------------------------------------------
 4. json_stats.py — TEXT STATISTICS REPORT
@@ -172,9 +182,9 @@ short description of each file and how to tweak it when you need to.
   Meant to be placed in a folder that contains several subfolders (e.g.
   30_vertices, 40_vertices, 50_vertices, 60_vertices). For each subfolder
   that contains a "stats.html", it copies that file into a "full_report"
-  folder, prefixed with the vertex count found in the subfolder name:
+  folder, prefixed with the full subfolder name:
 
-      50_vertices/stats.html  ->  full_report/50_stats.html
+      50_vertices/stats.html  ->  full_report/50_vertices_stats.html
 
   How to use
   ----------
