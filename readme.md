@@ -50,10 +50,11 @@ cd 60_vertices && python3 html_stats.py && python3 json_stats.py
 
 ## Findings (highlight)
 
-On ~296 random graphs (n≈60, p≈0.6) the framework isolated **37 hard instances**
-where only exact backtracking reaches χ; all heuristics stay stuck at χ+1. The gap
-is systematically 1, suggesting a shared structural property near the
-k-colorability phase transition.
+The framework isolated a **challenging subset of 37 hard instances** (n=40–50, mostly
+around p≈0.6) where the ten heuristics stay stuck at χ+1. Exact solvers dominate:
+backtracking reaches χ on all 37, CP-SAT on 22/37, and SAT on 5/37. On 15/37 instances,
+**only backtracking** finds the optimum. The gap is systematically 1, suggesting a shared
+structural property (hidden clique, critical core) near the k-colorability phase transition.
 
 ## Project layout
 

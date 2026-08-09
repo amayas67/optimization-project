@@ -62,6 +62,8 @@ from ido import ido_coloring
 from tabu import tabucol_coloring
 from sa import sa_coloring
 from hea import hea_coloring
+from cpsat import cpsat_coloring
+from sat import sat_coloring
 
 # ===========================================================================
 # Matplotlib display
@@ -636,6 +638,8 @@ if __name__ == "__main__":
         ("sa",                   "Simulated Annealing",  lambda g: sa_coloring(g, max_iter=20000)),
         ("hea",                  "Hybrid Evolutionary",  lambda g: hea_coloring(g, pop_size=10, max_generations=50, ls_iter=1000)),
         ("tabu",                 "Tabucol",              lambda g: tabucol_coloring(g, max_iter=1000)),
+        ("cpsat",                "CP-SAT (OR-Tools)",    lambda g: cpsat_coloring(g, time_limit=60)),
+        ("sat",                  "SAT",                  lambda g: sat_coloring(g, time_limit=60)),
         ("backtracking",         "Backtracking (exact)", lambda g: backtrack_coloring(g)),
     ]
     NAMES = {a: n for a, n, _ in ALGORITHMS}

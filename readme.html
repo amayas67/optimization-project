@@ -297,7 +297,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
           <tr><td class="algo-name">Tabucol</td><td>Metaheuristic</td><td>Tabu search — conflicts</td><td>max_iter=1000 (main pipeline) / 5000 (challenging set)</td><td><span class="badge badge-info">Meta</span></td></tr>
           <tr><td class="algo-name">HEA</td><td>Hybrid (GA+TS)</td><td>Evolutionary — GPX crossover + Tabu</td><td>pop=10, gen=50, ls=1000 (main) / pop=5, gen=10, ls=100 (challenging)</td><td><span class="badge badge-info">Meta</span></td></tr>
           <tr><td class="algo-name">Backtracking (exact)</td><td>Exact</td><td>Exponential — Welsh-Powell pruning</td><td>—</td><td><span class="badge badge-warn">Exact</span></td></tr>
-          <tr><td class="algo-name">CP-SAT (OR-Tools)</td><td>Exact (CP)</td><td>Constraint programming</td><td>time_limit=60s</td><td><span class="badge badge-warn">Exact</span></td></tr>
+          <tr><td class="algo-name">CP-SAT (OR-Tools)</td><td>Exact (CP)</td><td>Constraint programming</td><td>time_limit=60s (capped at 60/k per k)</td><td><span class="badge badge-warn">Exact</span></td></tr>
           <tr><td class="algo-name">SAT</td><td>Exact (SAT)</td><td>SAT reduction + solver</td><td>—</td><td><span class="badge badge-warn">Exact</span></td></tr>
         </tbody>
       </table>
@@ -420,7 +420,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
   <section id="anomalies">
     <h2>Experimental Findings <span class="hint">The statistical anomalies</span></h2>
     <div class="explain">
-      <div class="ex-title">What the framework revealed on 296+ random graphs (n=60, p≈0.6)</div>
+      <div class="ex-title">What the framework revealed on the challenging subset (37 hard instances, n=40–50)</div>
       The massive experimentation isolated <b>structurally hard instances</b> where the gap
       between heuristics and exact optimality is systematic, reproducible, and significant.
     </div>
@@ -429,7 +429,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
       <article class="anomaly-card">
         <span class="anum">37</span>
         <div class="atitle">Isolated "hard" instances</div>
-        <div class="adesc">At p≈0.6 (critical density), 37 graphs out of 296 require <b>exclusively backtracking</b> to reach χ. All other solvers (DSATUR, SA, HEA, Tabucol, CP-SAT) remain stuck at χ+1.</div>
+        <div class="adesc">37 graphs (n=40–50, p≈0.3–0.9) where backtracking is the only guaranteed optimum on 15 of them. On the other 22, <b>CP-SAT (and sometimes SAT) also reach χ</b>, but all ten heuristics (DSATUR, SA, HEA, Tabucol, …) stay at χ+1.</div>
       </article>
       <article class="anomaly-card">
         <span class="anum">+1</span>
@@ -439,7 +439,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
       <article class="anomaly-card">
         <span class="anum">p≈0.6</span>
         <div class="atitle">Critical density phase</div>
-        <div class="adesc">Difficulty explodes in a narrow window around p=0.6 (G(n,p) with n=60). Outside it, heuristics find the optimum. This <b>phase transition</b> coincides with the expected satisfiability threshold for k-colorability.</div>
+        <div class="adesc">Most hard instances concentrate around p≈0.6 (G(n,p) with n=40–50). Difficulty explodes in a narrow density window; outside it, heuristics usually find the optimum. This <b>phase transition</b> coincides with the expected satisfiability threshold for k-colorability.</div>
       </article>
       <article class="anomaly-card">
         <span class="anum">⚡</span>
@@ -447,33 +447,36 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
         <div class="adesc">SA, Tabucol, HEA: <b>highly variable</b> performance depending on density. On hard instances, they converge to local optima (χ+1) without an effective escape mechanism. The fitness landscape shows deep valleys with no gradient toward the global optimum.</div>
       </article>
       <article class="anomaly-card">
-        <span class="anum">0%</span>
-        <div class="atitle">Total failure of approximate exacts</div>
-        <div class="adesc">CP-SAT and SAT <b>do not reach the optimum</b> on these 37 instances (evaluated on the challenging subset, with the per-k time budgets noted above), while naive backtracking (without sophisticated upper bounds) succeeds. The difficulty appears <b>structural</b> rather than purely computational — though this subset was pre-selected precisely because heuristics failed, so the comparison is not on the full 296-graph corpus.</div>
+        <span class="anum">15/37</span>
+        <div class="atitle">Backtracking-only optimum</div>
+        <div class="adesc">On 15 of the 37 instances, <b>only backtracking</b> reaches χ. CP-SAT reaches χ on 22/37 and SAT on 5/37 — so the difficulty is not purely computational, but exact solvers still dominate the heuristics, which never cross χ+1.</div>
       </article>
       <article class="anomaly-card">
-        <span class="anum">χ∈[23,28]</span>
+        <span class="anum">χ≈8</span>
         <div class="atitle">Moderate chromatic number</div>
-        <div class="adesc">These graphs are not trivial (χ≈n/2) but not extreme either. The <b>gap ω ≤ χ ≤ Δ+1</b> is tight: ω_lower_bound ≈ 23, χ_optimal ≈ 25–26. The structure blocks just above the clique bound.</div>
+        <div class="adesc">These graphs are not trivial but not extreme either (χ≈8 for n=40–50). The <b>gap ω ≤ χ ≤ Δ+1</b> is tight: the structure blocks just above the clique bound, which is where heuristics get stuck.</div>
       </article>
     </div>
 
     <div class="explain" style="margin-top:24px; border-color:var(--teal); background:rgba(47,201,168,.04)">
-      <div class="ex-title">Empirical proof — Excerpt from a typical instance (000001.json, n=60, p=0.90)</div>
+      <div class="ex-title">Empirical proof — Excerpt from a typical hard instance (000063.json, n=50, p=0.6)</div>
       <p style="font-family:var(--mono); font-size:.75rem; color:var(--text); background:var(--panel2); border:1px solid var(--frame); border-radius:8px; padding:16px; overflow-x:auto; margin-top:10px;">
-χ = 26 (source: best_heuristic)<br>
-Greedy: 32 colors  (+6) ✗<br>
-Welsh-Powell: 28 colors  (+2) ✗<br>
-DSATUR: 28 colors  (+2) ✗<br>
-IDO: 28 colors  (+2) ✗<br>
-RLF: 27 colors  (+1) ✗<br>
-Smallest-Degree-Last: 28 colors  (+2) ✗<br>
-Random Greedy: 29 colors  (+3) ✗<br>
-<strong style="color:var(--ok)">SA: 26 colors  (+0) ✓</strong><br>
-<strong style="color:var(--ok)">HEA: 26 colors  (+0) ✓</strong><br>
-Tabucol: 30 colors  (+4) ✗<br>
+χ = 11 (source: backtracking / CP-SAT)<br>
+Greedy: 16 colors  (+5) ✗<br>
+Welsh-Powell: 14 colors  (+3) ✗<br>
+DSATUR: 13 colors  (+2) ✗<br>
+IDO: 13 colors  (+2) ✗<br>
+RLF: 13 colors  (+2) ✗<br>
+Smallest-Degree-Last: 14 colors  (+3) ✗<br>
+Random Greedy: 14 colors  (+3) ✗<br>
+SA: 12 colors  (+1) ✗<br>
+HEA: 12 colors  (+1) ✗<br>
+Tabucol: 13 colors  (+2) ✗<br>
+SAT: 16 colors  (+5) ✗<br>
+<strong style="color:var(--ok)">CP-SAT: 11 colors  (+0) ✓</strong><br>
+<strong style="color:var(--ok)">Backtracking: 11 colors  (+0) ✓</strong><br>
 <br>
-<em>On the 37 hard instances (challenging subset): only backtracking reaches χ. SA/HEA fail systematically under the reduced challenging-set parameters (SA max_iter=5000, HEA pop=5/gen=10/ls=100).</em>
+<em>On the 37 hard instances: the ten heuristics stay at χ+1; only exact solvers (backtracking, and CP-SAT on 22/37) reach χ. SA/HEA fail under the challenging-set parameters (SA max_iter=5000, HEA pop=5/gen=10/ls=100).</em>
       </p>
     </div>
   </section>
