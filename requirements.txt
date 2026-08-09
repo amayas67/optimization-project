@@ -1,0 +1,4 @@
+matplotlib>=3.5
+ortools>=9.0
+python-sat>=1.8
+pandas>=1.3
