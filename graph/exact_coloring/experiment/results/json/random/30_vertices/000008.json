@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "run_id": "000008",
-  "generated_at": "2026-08-04T11:30:01.508565",
+  "generated_at": "2026-08-10T22:13:10.133689",
   "seed": null,
   "instance": {
     "type": "random",
@@ -1259,45 +1259,6 @@
       ]
     },
     {
-      "algorithm": "random_greedy",
-      "n_colors": 18,
-      "gap_to_chi": 1,
-      "optimal": false,
-      "time_ms": 0.773,
-      "solution": [
-        9,
-        7,
-        10,
-        12,
-        6,
-        13,
-        3,
-        2,
-        4,
-        7,
-        8,
-        11,
-        3,
-        0,
-        0,
-        4,
-        12,
-        2,
-        15,
-        16,
-        13,
-        17,
-        5,
-        5,
-        12,
-        1,
-        6,
-        2,
-        11,
-        14
-      ]
-    },
-    {
       "algorithm": "sa",
       "n_colors": 17,
       "gap_to_chi": 0,
@@ -1452,6 +1413,61 @@
         12,
         13
       ]
+    },
+    {
+      "algorithm": "random_greedy",
+      "n_colors": 18,
+      "gap_to_chi": 1,
+      "optimal": false,
+      "time_ms": 0.773,
+      "solution": [
+        9,
+        7,
+        10,
+        12,
+        6,
+        13,
+        3,
+        2,
+        4,
+        7,
+        8,
+        11,
+        3,
+        0,
+        0,
+        4,
+        12,
+        2,
+        15,
+        16,
+        13,
+        17,
+        5,
+        5,
+        12,
+        1,
+        6,
+        2,
+        11,
+        14
+      ]
+    },
+    {
+      "algorithm": "cpsat",
+      "n_colors": -1,
+      "gap_to_chi": null,
+      "optimal": false,
+      "time_ms": 30041.332,
+      "solution": []
+    },
+    {
+      "algorithm": "sat",
+      "n_colors": -1,
+      "gap_to_chi": null,
+      "optimal": false,
+      "time_ms": 35512.141,
+      "solution": []
     }
   ],
   "labels": {

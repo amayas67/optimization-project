@@ -2,8 +2,8 @@
 """
 main.py — Comparison of coloring algorithms on the same graph.
 
-Generates a graph of a chosen type, applies the nine portfolio algorithms,
-displays terminal reports + interactive figures, then exports:
+Generates a graph of a chosen type, applies the 13 portfolio algorithms,
+displays terminal reports, then exports:
   • a "machine-ready" JSON in results/json/<type>/  (flat features,
     precomputed labels, raw matrix → ready for machine learning);
 
@@ -15,6 +15,7 @@ import json
 import math
 import os
 import re
+import shutil
 import sys
 import time
 import random
@@ -66,243 +67,106 @@ from cpsat import cpsat_coloring
 from sat import sat_coloring
 
 # ===========================================================================
-# Matplotlib display
+# Hard-timeout guard for exact solvers (mirrors challenging_graphs/compare.py)
+# ===========================================================================
+# pysat's native timer is not always reliable on UNSAT instances, and CP-SAT /
+# SAT can hang on large dense graphs. We run each exact solver in a separate
+# process and kill it if it exceeds main_kill, so the pipeline never blocks.
+#
+# Two distinct limits:
+#   * time_limit : budget passed to the solver itself (per k, for solvers that
+#     accept it, e.g. cpsat/sat). Soft, graceful stop.
+#   * main_kill  : hard process-level kill in main.py. If exceeded, the process
+#     is terminated and the result is marked TIMEOUT.
+#
+# IMPORTANT: backtracking is the ground-truth solver (it provides the true χ).
+# It must NEVER be time-limited — a timeout would corrupt χ. If backtracking is
+# still running we wait for it (no kill, no greedy fallback); only on a real
+# error is the result marked TIMEOUT (n_colors = -1), never silently, and the
+# run continues without any greedy substitute.
+
+def _safe_exact_worker(q, fn, adj, tl):
+    """Module-level worker so it can be pickled by multiprocessing."""
+    import inspect
+    try:
+        kwargs = {}
+        if "time_limit" in inspect.signature(fn).parameters:
+            kwargs["time_limit"] = tl
+        colors, nb = fn(adj, **kwargs)
+        q.put(("ok", (colors, nb)))
+    except Exception as exc:  # noqa: BLE001
+        q.put(("error", str(exc)))
+
+
+def _safe_exact(func, adj_matrix, time_limit=None, main_kill=40):
+    """Run a solver with a hard process-level kill (main_kill).
+
+    *time_limit* (seconds) is forwarded to the solver (if it accepts a
+    ``time_limit`` parameter) as its per-k budget. It is ignored for solvers
+    that do not accept it (e.g. backtracking).
+
+    *main_kill* (seconds) is the hard ceiling: if the whole call exceeds it,
+    main.py kills the process and marks the result as TIMEOUT.
+
+    - backtracking: main_kill=1810 (30 min; no time_limit, never auto-limited)
+    - other exact solvers (cpsat, sat): time_limit=30, main_kill=40
+    """
+    import multiprocessing
+    from multiprocessing import Queue
+
+    func_name = getattr(func, "__name__", "")
+    hard_timeout = main_kill
+
+    q = Queue()
+    p = multiprocessing.Process(
+        target=_safe_exact_worker, args=(q, func, adj_matrix, time_limit))
+    p.start()
+
+    p.join(hard_timeout)
+
+    if p.is_alive():
+        p.terminate()
+        p.join(1)
+        if p.is_alive():
+            p.kill()
+        print(f"  ⚠ {func_name} timed out (> {hard_timeout}s) — result marked as TIMEOUT")
+        return [], -1
+
+    if q.empty():
+        print(f"  ⚠ {func_name} produced no result — marked as TIMEOUT")
+        return [], -1
+
+    status, payload = q.get()
+    if status == "ok":
+        return payload
+    print(f"  ⚠ {func_name} errored ({payload}) — marked as TIMEOUT")
+    return [], -1
+
+
+# ===========================================================================
+# Matplotlib display (removed — main.py is batch-only / minimalist)
 # ===========================================================================
 
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.patches import FancyArrowPatch, Circle
+# Interactive graph drawing (matplotlib) removed for a minimalist, batch-only main.
 
-THEME = {
-    "background": "#0E1621", "title": "#EAF2F7", "text": "#93A9B8", "muted": "#5D7284",
-    "edge": "#3A4E60", "edge_hi": "#A8DFF0", "frame": "#2C4054", "panel": "#16222F",
-}
 
-PALETTE = [
+
+# ---------------------------------------------------------------------------
+# Terminal report
+# ---------------------------------------------------------------------------
+
+_PALETTE = [
     "#F5A83C", "#2FBFAE", "#EE7FA9", "#7B9CF5",
     "#A3D65C", "#F0795B", "#5AC8E8", "#C88BE0",
     "#E8C547", "#63D6B1", "#D98AD9", "#8FB8FF",
 ]
 
 
-def _to_hex(c):
-    if isinstance(c, str):
-        return c
-    r, g, b = (int(round(v * 255)) for v in c[:3])
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
 def _palette(nb):
-    if nb <= len(PALETTE):
-        return PALETTE[:nb]
-    cmap = plt.get_cmap("tab20", nb)
-    return [_to_hex(cmap(i)) for i in range(nb)]
+    if nb <= len(_PALETTE):
+        return _PALETTE[:nb]
+    return _PALETTE * ((nb // len(_PALETTE)) + 1)
 
-
-def _shade(hexcolor, factor=0.66):
-    r, g, b = (int(hexcolor[i:i + 2], 16) for i in (1, 3, 5))
-    return f"#{int(r * factor):02x}{int(g * factor):02x}{int(b * factor):02x}"
-
-
-def _label_color(hexcolor):
-    r, g, b = (int(hexcolor[i:i + 2], 16) / 255 for i in (1, 3, 5))
-    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-    return "#0F1822" if luminance > 0.6 else "#F4F8FB"
-
-
-def _circle_layout(n):
-    if n == 1:
-        return [(0.0, 0.0)]
-    return [(math.cos(2 * math.pi * i / n - math.pi / 2),
-             math.sin(2 * math.pi * i / n - math.pi / 2)) for i in range(n)]
-
-
-def _spring_layout(adj, iterations=160, seed=42):
-    n = len(adj)
-    if n <= 1:
-        return _circle_layout(n)
-    rng = random.Random(seed)
-    pos = [[rng.uniform(-1, 1), rng.uniform(-1, 1)] for _ in range(n)]
-    k = 2.0 / math.sqrt(n)
-    temp = 0.4
-    for _ in range(iterations):
-        disp = [[0.0, 0.0] for _ in range(n)]
-        for i in range(n):
-            xi, yi = pos[i]
-            for j in range(i + 1, n):
-                dx, dy = xi - pos[j][0], yi - pos[j][1]
-                d = math.hypot(dx, dy) or 1e-4
-                ux, uy = dx / d, dy / d
-                f_rep = k * k / d
-                disp[i][0] += ux * f_rep; disp[i][1] += uy * f_rep
-                disp[j][0] -= ux * f_rep; disp[j][1] -= uy * f_rep
-                if adj[i][j]:
-                    f_att = d * d / k
-                    disp[i][0] -= ux * f_att; disp[i][1] -= uy * f_att
-                    disp[j][0] += ux * f_att; disp[j][1] += uy * f_att
-        for i in range(n):
-            d = math.hypot(disp[i][0], disp[i][1])
-            if d > 1e-9:
-                s = min(d, temp) / d
-                pos[i][0] += disp[i][0] * s
-                pos[i][1] += disp[i][1] * s
-        temp *= 0.965
-    cx = sum(p[0] for p in pos) / n
-    cy = sum(p[1] for p in pos) / n
-    pos = [[p[0] - cx, p[1] - cy] for p in pos]
-    rmax = max(math.hypot(x, y) for x, y in pos) or 1.0
-    return [(x / rmax, y / rmax) for x, y in pos]
-
-
-def draw_graph(adj_matrix, colors, title="Graph Coloring",
-               layout="circle", show=True, elapsed_ms=None):
-    """Displays the colored graph (dark theme). Hover for neighborhood info; 's' to save PNG."""
-    n = len(adj_matrix)
-    if n == 0:
-        print("Empty graph, nothing to display.")
-        return None
-
-    pos = _circle_layout(n) if layout == "circle" else _spring_layout(adj_matrix)
-    deg = [sum(adj_matrix[i]) for i in range(n)]
-    m = sum(deg) // 2
-    delta = max(deg)
-    used = sorted(set(colors))
-    indice = {c: k for k, c in enumerate(used)}
-    nb_colors = len(used)
-    palette = _palette(nb_colors)
-    counts = [colors.count(c) for c in used]
-
-    fig, ax = plt.subplots(figsize=(9, 8.4))
-    fig.patch.set_facecolor(THEME["background"])
-    ax.set_facecolor(THEME["background"])
-    try:
-        fig.canvas.manager.set_window_title(title)
-    except Exception:
-        pass
-
-    if layout == "circle" and n > 2:
-        ax.add_patch(Circle((0, 0), 1.0, fill=False, color="#1D2C3A",
-                            linestyle=(0, (3, 7)), linewidth=1.0, zorder=0.5))
-
-    edges = []
-    for i in range(n):
-        for j in range(i + 1, n):
-            if adj_matrix[i][j] == 1:
-                p = FancyArrowPatch(pos[i], pos[j], arrowstyle="-",
-                                    connectionstyle="arc3,rad=0.12",
-                                    color=THEME["edge"], linewidth=1.1, alpha=0.85, zorder=1)
-                ax.add_patch(p)
-                edges.append((p, i, j))
-
-    node_r = max(0.028, min(0.062, 1.6 / n))
-    label_fs = 10.5 if node_r > 0.045 else 8.0
-    nodes = []
-    for i in range(n):
-        c = palette[indice[colors[i]]]
-        glow = Circle(pos[i], node_r * 1.7, facecolor=c, edgecolor="none", alpha=0.14, zorder=2)
-        disc = Circle(pos[i], node_r, facecolor=c, edgecolor=_shade(c), linewidth=1.6, zorder=3)
-        lab = ax.text(pos[i][0], pos[i][1], str(i), ha="center", va="center",
-                      fontsize=label_fs, fontweight="bold", color=_label_color(c), zorder=4)
-        ax.add_patch(glow); ax.add_patch(disc)
-        nodes.append({"glow": glow, "node": disc, "label": lab, "ec": _shade(c)})
-
-    panel = f"n    {n} vertices\nm    {m} edges\nχ̂    {nb_colors} colors\nΔ    {delta}"
-    if elapsed_ms is not None:
-        panel += f"\nt    {elapsed_ms:.2f} ms"
-    ax.text(0.02, 0.98, panel, transform=ax.transAxes, va="top", ha="left",
-            fontfamily="monospace", fontsize=9.5, color=THEME["text"], linespacing=1.55,
-            bbox=dict(boxstyle="round,pad=0.6", facecolor=THEME["panel"],
-                      edgecolor=THEME["frame"], alpha=0.92))
-
-    handles = [mpatches.Patch(facecolor=palette[k], edgecolor="none",
-               label=f"Color {c}  ·  {counts[k]} vertex{'es' if counts[k] > 1 else ''}")
-               for k, c in enumerate(used)]
-    leg = ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1.0),
-                    frameon=True, fancybox=True, framealpha=0.92,
-                    facecolor=THEME["panel"], edgecolor=THEME["frame"],
-                    labelcolor="#D7E3EB", fontsize=9.5, title="Coloring", title_fontsize=10)
-    leg.get_title().set_color(THEME["title"])
-
-    ax.set_title(title, fontsize=15.5, fontweight="bold", color=THEME["title"], pad=20)
-    ax.text(0.5, -0.015,
-            "hover a node to highlight its neighborhood   ·   's' to save PNG   ·   press Enter for next figure",
-            transform=ax.transAxes, ha="center", fontsize=8.5, color=THEME["muted"])
-    ax.set_aspect("equal"); ax.axis("off")
-    margin = max(math.hypot(x, y) for x, y in pos) + 0.35
-    ax.set_xlim(-margin, margin); ax.set_ylim(-margin, margin)
-
-    tip = ax.annotate("", xy=(0, 0), xytext=(14, 14), textcoords="offset points",
-                      fontfamily="monospace", fontsize=9, color="#DCE9F1",
-                      bbox=dict(boxstyle="round,pad=0.45", facecolor=THEME["panel"],
-                                edgecolor="#35506A", alpha=0.95),
-                      arrowprops=dict(arrowstyle="-", color="#35506A", lw=0.8), zorder=6)
-    tip.set_visible(False)
-    state = {"h": -1}
-
-    def apply_effect(h):
-        for i, a in enumerate(nodes):
-            if h == -1:
-                a["glow"].set_alpha(0.14); a["node"].set_alpha(1.0); a["label"].set_alpha(1.0)
-                a["node"].set_edgecolor(a["ec"]); a["node"].set_linewidth(1.6)
-            else:
-                neighbor = (i == h) or adj_matrix[h][i]
-                a["glow"].set_alpha(0.24 if i == h else (0.14 if neighbor else 0.03))
-                a["node"].set_alpha(1.0 if neighbor else 0.18)
-                a["label"].set_alpha(1.0 if neighbor else 0.18)
-                a["node"].set_edgecolor("#EAF6FF" if i == h else a["ec"])
-                a["node"].set_linewidth(2.4 if i == h else 1.6)
-        for p, i, j in edges:
-            if h == -1:
-                p.set_color(THEME["edge"]); p.set_linewidth(1.1); p.set_alpha(0.85)
-            elif h in (i, j):
-                p.set_color(THEME["edge_hi"]); p.set_linewidth(2.3); p.set_alpha(1.0)
-            else:
-                p.set_color(THEME["edge"]); p.set_linewidth(1.1); p.set_alpha(0.08)
-
-    def on_move(event):
-        if event.inaxes != ax or event.xdata is None:
-            target = -1
-        else:
-            target, best = -1, node_r * 1.9
-            for i, (x, y) in enumerate(pos):
-                d = math.hypot(event.xdata - x, event.ydata - y)
-                if d < best:
-                    target, best = i, d
-        if target == state["h"]:
-            return
-        state["h"] = target
-        apply_effect(target)
-        if target == -1:
-            tip.set_visible(False)
-        else:
-            neighbors = [j for j in range(n) if adj_matrix[target][j]]
-            tip.xy = pos[target]
-            tip.set_text(f"vertex {target} · degree {deg[target]}\n"
-                         f"neighbors: {', '.join(map(str, neighbors)) if neighbors else '—'}")
-            tip.set_visible(True)
-        fig.canvas.draw_idle()
-
-    def on_key(event):
-        if event.key == "s":
-            name = re.sub(r"[^\w\s-]+", "_", title, flags=re.I).strip("_")
-            fig.savefig(f"{name}.png", dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
-            print(f"Figure saved: {name}.png")
-        elif event.key == "enter":
-            plt.close(fig)
-
-    fig.canvas.mpl_connect("motion_notify_event", on_move)
-    fig.canvas.mpl_connect("axes_leave_event", lambda e: on_move(e))
-    fig.canvas.mpl_connect("key_press_event", on_key)
-
-    plt.tight_layout()
-    if show:
-        plt.show()
-    return fig, ax
-
-
-# ---------------------------------------------------------------------------
-# Terminal report
-# ---------------------------------------------------------------------------
 
 def _swatch(hexcolor):
     if not sys.stdout.isatty():
@@ -438,11 +302,22 @@ def compute_labels(resultats, chi):
       best_algorithm = fewest colors, then lowest time;
       optimal_algorithms = all that reach χ.
     """
-    best = min(resultats, key=lambda r: (r["n_colors"], r["time_ms"]))
-    optimal = [r["algorithm"] for r in resultats if r["n_colors"] == chi]
+    computed = [r for r in resultats if r["n_colors"] >= 0]
+    if computed:
+        best = min(computed, key=lambda r: (r["n_colors"], r["time_ms"]))
+        best_algorithm = best["algorithm"]
+        best_n_colors = best["n_colors"]
+    else:
+        best_algorithm = ""
+        best_n_colors = -1
+    if chi >= 0:
+        optimal = [r["algorithm"] for r in resultats
+                   if r["n_colors"] >= 0 and r["n_colors"] == chi]
+    else:
+        optimal = []
     return {
-        "best_algorithm": best["algorithm"],
-        "best_n_colors": best["n_colors"],
+        "best_algorithm": best_algorithm,
+        "best_n_colors": best_n_colors,
         "optimal_algorithms": optimal,
         "n_optimal_algorithms": len(optimal),
     }
@@ -572,10 +447,22 @@ def load_data(root=None, format="long"):
 if __name__ == "__main__":
 
     # === Configuration =====================================================
-    show = False        # False → no matplotlib window
-    layout = "circle"    # "circle" or "spring"
     SEED = None          # fix an integer (e.g. 42) for a reproducible corpus
     loop_nb = 296    # number of graphs to generate and color in a row
+
+    # -----------------------------------------------------------------------
+    # Mode selector
+    # -----------------------------------------------------------------------
+    # operate_on_existing_json == 0 → GENERATION mode (build graphs, below).
+    # operate_on_existing_json == 1 → JSON mode: instead of generating graphs,
+    #   main.py reads every *.json inside JSON_DIR, runs the portfolio on each,
+    #   and writes the recomputed results back (originals are preserved in a
+    #   new/ subfolder). main.py is "smart": it only (re)computes the
+    #   algorithms listed in ALGORITHMS and KEEPS the previous result of any
+    #   algorithm you commented out below. So to skip an algorithm, simply
+    #   comment its line — no separate add/del lists needed.
+    operate_on_existing_json = 1
+    JSON_DIR = os.path.join(os.path.dirname(__file__), "results", "json", "random","challenging_graphs")
 
     # Graph type to generate — choose a number:
     #   1  → random       (Erdős–Rényi G(n, p))
@@ -608,7 +495,7 @@ if __name__ == "__main__":
     #   tree         → n: number of vertices (χ = 2 if n ≥ 2)
     #   regular      → n: number of vertices, d: degree of each vertex (n×d must be even)
     #   cycle        → n: number of vertices (χ = 2 if n even, 3 if n odd)
-    #   wheel        → n: total number of vertices, vertex 0 = center (χ = 3 or 4)
+    #   wheel         → n: total number of vertices, vertex 0 = center (χ = 3 or 4)
     #   grid         → rows: number of rows, cols: number of columns (χ = 2)
     #   hypercube    → d: dimension (2^d vertices, χ = 2)
     #   mycielski    → k: index (M_k has χ = k, triangle-free; M_2 = K_2, M_3 = C_5)
@@ -627,107 +514,248 @@ if __name__ == "__main__":
     }
 
     # (machine_id, display_name, function)
+    # In JSON mode, comment out an entry to DISABLE that algorithm (its
+    # previous result in the JSON is then preserved instead of being recomputed).
     ALGORITHMS = [
-        ("greedy",               "Greedy",               lambda g: greedy_coloring(g)),
-        ("welsh_powell",         "Welsh-Powell",         lambda g: welsh_powell_coloring(g)),
-        ("dsatur",               "DSATUR",               lambda g: dsatur_coloring(g)),
-        ("ido",                  "IDO",                  lambda g: ido_coloring(g)),
-        ("rlf",                  "RLF",                  lambda g: rlf_coloring(g)),
-        ("smallest_degree_last", "Smallest-degree-last", lambda g: smallest_degree_last_coloring(g)),
-        ("random_greedy",        "Random greedy (×10)",  lambda g: best_random_greedy_coloring(g, trials=10)),
-        ("sa",                   "Simulated Annealing",  lambda g: sa_coloring(g, max_iter=20000)),
-        ("hea",                  "Hybrid Evolutionary",  lambda g: hea_coloring(g, pop_size=10, max_generations=50, ls_iter=1000)),
-        ("tabu",                 "Tabucol",              lambda g: tabucol_coloring(g, max_iter=1000)),
-        ("cpsat",                "CP-SAT (OR-Tools)",    lambda g: cpsat_coloring(g, time_limit=60)),
-        ("sat",                  "SAT",                  lambda g: sat_coloring(g, time_limit=60)),
-        ("backtracking",         "Backtracking (exact)", lambda g: backtrack_coloring(g)),
+        # ("greedy",               "Greedy",               lambda g: greedy_coloring(g)),
+        # ("welsh_powell",         "Welsh-Powell",         lambda g: welsh_powell_coloring(g)),
+        # ("dsatur",               "DSATUR",               lambda g: dsatur_coloring(g)),
+        # ("ido",                  "IDO",                  lambda g: ido_coloring(g)),
+        # ("rlf",                  "RLF",                  lambda g: rlf_coloring(g)),
+        # ("smallest_degree_last", "Smallest-degree-last", lambda g: smallest_degree_last_coloring(g)),
+        # ("random_greedy",        "Random greedy (×10)",  lambda g: best_random_greedy_coloring(g, trials=10)),
+        # ("sa",                   "Simulated Annealing",  lambda g: sa_coloring(g, max_iter=20000)),
+        # ("hea",                  "Hybrid Evolutionary",  lambda g: hea_coloring(g, pop_size=10, max_generations=50, ls_iter=1000)),
+        # ("tabu",                 "Tabucol",              lambda g: tabucol_coloring(g, max_iter=20000)),
+        ("cpsat",                "CP-SAT (OR-Tools)",    lambda g: _safe_exact(cpsat_coloring, g, time_limit=50, main_kill=80)),
+        ("sat",                  "SAT",                  lambda g: _safe_exact(sat_coloring, g, time_limit=50, main_kill=80)),
+        # ("backtracking",         "Backtracking (exact)", lambda g: _safe_exact(backtrack_coloring, g, main_kill=1810)),
     ]
     NAMES = {a: n for a, n, _ in ALGORITHMS}
 
-    # === Generation ========================================================
-    params = PARAMS[GRAPH_TYPE]
-    generators = {
-        "random":       lambda p: generate_random_adjacency_matrix(**p),
-        "bipartite":    lambda p: generate_bipartite_adjacency_matrix(**p),
-        "complete":     lambda p: generate_complete_adjacency_matrix(**p),
-        "multipartite": lambda p: generate_multipartite_adjacency_matrix(**p),
-        "tree":         lambda p: generate_tree_adjacency_matrix(**p),
-        "regular":      lambda p: generate_regular_adjacency_matrix(**p),
-        "cycle":        lambda p: generate_cycle_adjacency_matrix(**p),
-        "wheel":        lambda p: generate_wheel_adjacency_matrix(**p),
-        "grid":         lambda p: generate_grid_adjacency_matrix(**p),
-        "hypercube":    lambda p: generate_hypercube_adjacency_matrix(**p),
-        "mycielski":    lambda p: generate_mycielski_adjacency_matrix(**p),
-    }
+    # Algorithms to REMOVE from existing JSON results in JSON mode.
+    # Every entry is commented out by default (so nothing is deleted). To drop
+    # an algorithm from the processed JSON files, simply uncomment its line.
+    DEL_ALGORITHME = [
+        # "greedy",
+        # "welsh_powell",
+        # "dsatur",
+        # "ido",
+        # "rlf",
+        # "smallest_degree_last",
+        # "random_greedy",
+        # "sa",
+        # "hea",
+        # "tabu",
+        # "cpsat",
+        # "sat",
+        # "backtracking",
+    ]
 
-    for loop_idx in range(loop_nb):
-        print(f"\n{'#' * 64}")
-        print(f"#  Generation {loop_idx + 1} / {loop_nb}  —  {GRAPH_TYPE}")
-        print(f"{'#' * 64}\n")
+    # === JSON mode =========================================================
+    if operate_on_existing_json:
+        json_files = [os.path.join(JSON_DIR, f)
+                      for f in sorted(os.listdir(JSON_DIR)) if f.endswith(".json")]
+        if not json_files:
+            print(f"No JSON files found in {JSON_DIR}")
+        del_ids = set(DEL_ALGORITHME)
 
-        # Seed: offset by loop index so each graph differs yet stays reproducible
-        current_seed = SEED + loop_idx if SEED is not None else None
-        if current_seed is not None:
-            random.seed(current_seed)
+        # Processed JSON are written into an `update/` subfolder alongside the
+        # source files, so the originals are never overwritten.
+        UPDATE_DIR = os.path.join(JSON_DIR, "update")
+        os.makedirs(UPDATE_DIR, exist_ok=True)
 
-        adj = generators[GRAPH_TYPE](params)
-        n = len(adj)
-        feats = graph_features(adj)
+        for path in json_files:
+            print(f"\n{'#' * 64}")
+            print(f"#  {os.path.basename(path)}")
+            print(f"{'#' * 64}\n")
 
-        # === Comparison loop ===================================================
-        results = []
-        for algo_id, name, algo in ALGORITHMS:
-            t0 = time.perf_counter()
-            colors, nb_colors = algo(adj)
-            dt = (time.perf_counter() - t0) * 1000
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            instance = data.get("instance", data)
+            adj = [list(map(int, row)) for row in
+                   instance.get("adjacency_matrix",
+                                instance.get("matrix", instance.get("adj", [])))]
+            n = len(adj)
+            feats = graph_features(adj)
 
-            print_report(f"{name} ({GRAPH_TYPE}, n={n})", adj, colors, nb_colors, dt)
+            existing = data.get("results")
+            existing_by_id = {r.get("algorithm"): r for r in (existing or [])}
+
+            # Algorithms that still need to be (re)computed: enabled, not in
+            # DEL_ALGORITHME, and not already present in the file's results.
+            algos_to_compute = [
+                (algo_id, name, algo) for algo_id, name, algo in ALGORITHMS
+                if algo_id not in del_ids and algo_id not in existing_by_id
+            ]
+
+            # If every selected algorithm is already present, there is nothing to
+            # recompute: copy the original file as-is into `update/`.
+            if not algos_to_compute:
+                out_path = os.path.join(UPDATE_DIR, os.path.basename(path))
+                shutil.copy2(path, out_path)
+                print(f"✓ déjà complet — copié {out_path}")
+                continue
+
+            # Recompute only the missing algorithms.
+            computed = {}
+            for algo_id, name, algo in algos_to_compute:
+                t0 = time.perf_counter()
+                colors, nb_colors = algo(adj)
+                dt = (time.perf_counter() - t0) * 1000
+
+                print_report(f"{name} (n={n})", adj, colors, nb_colors, dt)
+                print()
+
+                computed[algo_id] = {
+                    "algorithm": algo_id,
+                    "n_colors": nb_colors,
+                    "gap_to_chi": None,          # filled after χ calculation
+                    "optimal": None,
+                    "time_ms": round(dt, 3),
+                    "solution": colors,
+                }
+
+            # Merge: freshly computed + preserved existing results, minus any
+            # algorithm listed in DEL_ALGORITHME. Algorithms already present are
+            # kept untouched (never overwritten).
+            results = list(computed.values())
+            for algo_id, r in existing_by_id.items():
+                if algo_id not in del_ids:
+                    results.append(r)
+            results.sort(key=lambda r: (r["n_colors"] if r["n_colors"] >= 0 else 1 << 30))
+
+            # χ = result from backtracking (exact algorithm) if present,
+            # otherwise fallback to the best heuristic result.
+            bt = next((r for r in results
+                       if r["algorithm"] == "backtracking" and r["n_colors"] >= 0), None)
+            if bt is not None:
+                chi = bt["n_colors"]
+                chi_source = "backtracking"
+            else:
+                computed_valid = [r["n_colors"] for r in results if r["n_colors"] >= 0]
+                chi = min(computed_valid) if computed_valid else -1
+                chi_source = "best_heuristic" if computed_valid else "unknown"
+            for r in results:
+                ok = r["n_colors"] >= 0
+                r["gap_to_chi"] = (r["n_colors"] - chi) if (chi >= 0 and ok) else None
+                r["optimal"] = (chi >= 0 and ok and r["n_colors"] == chi)
+            labels = compute_labels(results, chi)
+
+            # Terminal summary
+            print("=" * 64)
+            print(f"  {'Algorithm':<25} {'Colors':>8} {'Gap':>6} {'Optimal':>8} {'ms':>11}")
+            print("-" * 64)
+            for r in results:
+                ok = "✓" if r["optimal"] else "✗"
+                gap = r["gap_to_chi"]
+                gap_str = f"{gap:+d}" if gap is not None else "-"
+                print(f"  {NAMES.get(r['algorithm'], r['algorithm']):<25} {r['n_colors']:>8} "
+                      f"{gap_str:>6} {ok:>8} {r['time_ms']:>11.2f}")
+            print("=" * 64)
+            print(f"  χ = {chi}   ·   best: {NAMES.get(labels['best_algorithm'], labels['best_algorithm'])}")
             print()
 
-            if show:
-                draw_graph(adj, colors,
-                           title=f"{name} — {nb_colors} color{'s' if nb_colors > 1 else ''}",
-                           layout=layout, show=True, elapsed_ms=dt)
+            # Write the processed JSON into the `update/` subfolder, preserving
+            # the original file untouched.
+            out_path = os.path.join(UPDATE_DIR, os.path.basename(path))
+            output = dict(data)
+            output["ground_truth"] = {
+                "chi": chi,
+                "source": chi_source,
+            }
+            output["results"] = results
+            output["labels"] = labels
+            output["generated_at"] = datetime.now().isoformat()
+            with open(out_path, "w", encoding="utf-8") as fh:
+                json.dump(output, fh, ensure_ascii=False, indent=2)
+            print(f"✓ wrote {out_path}")
 
-            results.append({
-                "algorithm": algo_id,
-                "n_colors": nb_colors,
-                "gap_to_chi": None,          # filled after χ calculation
-                "optimal": None,
-                "time_ms": round(dt, 3),
-                "solution": colors,
-            })
+    else:
+        # === Generation ===================================================
+        params = PARAMS[GRAPH_TYPE]
+        generators = {
+            "random":       lambda p: generate_random_adjacency_matrix(**p),
+            "bipartite":    lambda p: generate_bipartite_adjacency_matrix(**p),
+            "complete":     lambda p: generate_complete_adjacency_matrix(**p),
+            "multipartite": lambda p: generate_multipartite_adjacency_matrix(**p),
+            "tree":         lambda p: generate_tree_adjacency_matrix(**p),
+            "regular":      lambda p: generate_regular_adjacency_matrix(**p),
+            "cycle":        lambda p: generate_cycle_adjacency_matrix(**p),
+            "wheel":        lambda p: generate_wheel_adjacency_matrix(**p),
+            "grid":         lambda p: generate_grid_adjacency_matrix(**p),
+            "hypercube":    lambda p: generate_hypercube_adjacency_matrix(**p),
+            "mycielski":    lambda p: generate_mycielski_adjacency_matrix(**p),
+        }
 
-        # χ = result from backtracking (exact algorithm) if present,
-        # otherwise fallback to the best heuristic result.
-        bt = next((r for r in results if r["algorithm"] == "backtracking"), None)
-        if bt is not None:
-            chi = bt["n_colors"]
-            chi_source = "backtracking"
-        else:
-            chi = min(r["n_colors"] for r in results)
-            chi_source = "best_heuristic"
-        for r in results:
-            r["gap_to_chi"] = r["n_colors"] - chi
-            r["optimal"] = (r["n_colors"] == chi)
-        labels = compute_labels(results, chi)
+        for loop_idx in range(loop_nb):
+            print(f"\n{'#' * 64}")
+            print(f"#  Generation {loop_idx + 1} / {loop_nb}  —  {GRAPH_TYPE}")
+            print(f"{'#' * 64}\n")
 
-        # === Terminal summary ==================================================
-        print("=" * 64)
-        print(f"  {'Algorithm':<25} {'Colors':>8} {'Gap':>6} {'Optimal':>8} {'ms':>11}")
-        print("-" * 64)
-        for r in results:
-            ok = "✓" if r["optimal"] else "✗"
-            print(f"  {NAMES[r['algorithm']]:<25} {r['n_colors']:>8} "
-                  f"{r['gap_to_chi']:>+6} {ok:>8} {r['time_ms']:>11.2f}")
-        print("=" * 64)
-        print(f"  χ = {chi}   ·   best: {NAMES[labels['best_algorithm']]}")
-        print()
+            # Seed: offset by loop index so each graph differs yet stays reproducible
+            current_seed = SEED + loop_idx if SEED is not None else None
+            if current_seed is not None:
+                random.seed(current_seed)
 
-        # === Exports ===========================================================
-        json_dir = os.path.join(os.path.dirname(__file__), "results", "json", GRAPH_TYPE)
-        seq_index = _next_sequence_index(json_dir, "json")
-        export_json(GRAPH_TYPE, params, adj, feats, results, chi, labels, current_seed, seq_index,
-                    chi_source)
+            adj = generators[GRAPH_TYPE](params)
+            n = len(adj)
+            feats = graph_features(adj)
 
-    # For later aggregation: df = load_data()  (format="long" or "wide")
+            # === Comparison loop ===================================================
+            results = []
+            for algo_id, name, algo in ALGORITHMS:
+                t0 = time.perf_counter()
+                colors, nb_colors = algo(adj)
+                dt = (time.perf_counter() - t0) * 1000
+
+                print_report(f"{name} ({GRAPH_TYPE}, n={n})", adj, colors, nb_colors, dt)
+                print()
+
+                results.append({
+                    "algorithm": algo_id,
+                    "n_colors": nb_colors,
+                    "gap_to_chi": None,          # filled after χ calculation
+                    "optimal": None,
+                    "time_ms": round(dt, 3),
+                    "solution": colors,
+                })
+
+            # χ = result from backtracking (exact algorithm) if present,
+            # otherwise fallback to the best heuristic result.
+            bt = next((r for r in results if r["algorithm"] == "backtracking"), None)
+            if bt is not None and bt["n_colors"] >= 0:
+                chi = bt["n_colors"]
+                chi_source = "backtracking"
+            else:
+                # ignore solvers that timed out / errored (n_colors == -1)
+                computed = [r["n_colors"] for r in results if r["n_colors"] >= 0]
+                chi = min(computed) if computed else -1
+                chi_source = "best_heuristic" if computed else "unknown"
+            for r in results:
+                ok = r["n_colors"] >= 0
+                r["gap_to_chi"] = (r["n_colors"] - chi) if (chi >= 0 and ok) else None
+                r["optimal"] = (chi >= 0 and ok and r["n_colors"] == chi)
+            labels = compute_labels(results, chi)
+
+            # === Terminal summary ==================================================
+            print("=" * 64)
+            print(f"  {'Algorithm':<25} {'Colors':>8} {'Gap':>6} {'Optimal':>8} {'ms':>11}")
+            print("-" * 64)
+            for r in results:
+                ok = "✓" if r["optimal"] else "✗"
+                gap = r["gap_to_chi"]
+                gap_str = f"{gap:+d}" if gap is not None else "-"
+                print(f"  {NAMES[r['algorithm']]:<25} {r['n_colors']:>8} "
+                      f"{gap_str:>6} {ok:>8} {r['time_ms']:>11.2f}")
+            print("=" * 64)
+            print(f"  χ = {chi}   ·   best: {NAMES.get(labels['best_algorithm'], labels['best_algorithm'])}")
+            print()
+
+            # === Exports ===========================================================
+            json_dir = os.path.join(os.path.dirname(__file__), "results", "json", GRAPH_TYPE)
+            seq_index = _next_sequence_index(json_dir, "json")
+            export_json(GRAPH_TYPE, params, adj, feats, results, chi, labels, current_seed, seq_index,
+                        chi_source)
+
+        # For later aggregation: df = load_data()  (format="long" or "wide")

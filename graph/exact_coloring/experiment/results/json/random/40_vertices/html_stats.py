@@ -38,6 +38,8 @@ ALGORITHMS = [
     ("Hybrid Evolutionary", "hea"),
     ("Tabucol", "tabu"),
     ("Backtracking (exact)", "backtracking"),
+    ("CP-SAT (OR-Tools)", "cpsat"),
+    ("SAT", "sat"),
 ]
 
 # Noms JSON des 10 premiers algorithmes du portfolio (pour "The first ten").
@@ -223,14 +225,19 @@ def analyser_json(path):
     best_n_colors = _to_int(labels.get("best_n_colors", 0), 0)
 
     if results:
-        computed_best_algo, computed_best_res = min(
-            results.items(),
-            key=lambda kv: (
-                kv[1]["n_colors"],
-                kv[1]["gap_to_chi"],
-                kv[1]["time_ms"],
-            ),
-        )
+        # Ignore solvers that timed out / errored (n_colors < 0) when picking the best.
+        computed = {a: r for a, r in results.items() if r["n_colors"] >= 0}
+        if computed:
+            computed_best_algo, computed_best_res = min(
+                computed.items(),
+                key=lambda kv: (
+                    kv[1]["n_colors"],
+                    kv[1]["gap_to_chi"],
+                    kv[1]["time_ms"],
+                ),
+            )
+        else:
+            computed_best_algo, computed_best_res = next(iter(results.items()))
 
         if not best_algorithm:
             best_algorithm = computed_best_algo
@@ -1386,9 +1393,12 @@ def main():
     project_root = find_project_root(directory)
 
     if project_root:
-        source_dir = os.path.relpath(directory, os.path.dirname(project_root))
+        # Relative to the project root so the generated stats.html works
+        # wherever the project is downloaded / moved.
+        source_dir = os.path.relpath(directory, project_root)
     else:
-        source_dir = directory
+        # Fallback: relative to the script's own folder.
+        source_dir = os.path.relpath(directory, os.path.dirname(os.path.abspath(__file__)))
 
     json_paths = scanner(directory)
 
@@ -1461,7 +1471,7 @@ def main():
         size_counts[scat] += 1
 
         min_colors = min(
-            (r["n_colors"] for r in info["results"].values()),
+            (r["n_colors"] for r in info["results"].values() if r["n_colors"] >= 0),
             default=float("inf"),
         )
 
@@ -1474,9 +1484,11 @@ def main():
             time_ms = r["time_ms"]
             gap_to_chi = r["gap_to_chi"]
 
-            total_colors[disp_name] += n_colors
+            # Ignore timeouts/errors (n_colors < 0) in aggregates
+            if n_colors >= 0:
+                total_colors[disp_name] += n_colors
+                total_gap[disp_name] += gap_to_chi
             total_time[disp_name] += time_ms
-            total_gap[disp_name] += gap_to_chi
 
             is_opt = bool(r["optimal"])
             is_best = (min_colors != float("inf") and n_colors == min_colors)
@@ -1496,11 +1508,13 @@ def main():
             if is_best:
                 best_files[disp_name].append(entry)
 
-            density_algo_stats[dcat][disp_name]["total"] += 1
-            if is_opt:
-                density_algo_stats[dcat][disp_name]["optimal"] += 1
-            if is_best:
-                density_algo_stats[dcat][disp_name]["best"] += 1
+            # Ignore timeouts/errors in density stats
+            if n_colors >= 0:
+                density_algo_stats[dcat][disp_name]["total"] += 1
+                if is_opt:
+                    density_algo_stats[dcat][disp_name]["optimal"] += 1
+                if is_best:
+                    density_algo_stats[dcat][disp_name]["best"] += 1
 
         # "The first ten"
         aeb_has_optimal = False

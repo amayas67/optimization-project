@@ -119,59 +119,6 @@ td.num{font-family:var(--mono); text-align:right}
 .badge-warn{background:rgba(242,168,53,.15); color:var(--amber); border:1px solid rgba(242,168,53,.3)}
 .badge-bad{background:rgba(255,122,106,.15); color:var(--bad); border:1px solid rgba(255,122,106,.3)}
 .badge-info{background:rgba(142,236,214,.15); color:var(--teal-hi); border:1px solid rgba(142,236,214,.3)}
-.density-bar{display:flex; align-items:center; gap:12px}
-.density-bar .track{flex:1; height:10px; background:var(--panel2); border-radius:5px; overflow:hidden; border:1px solid var(--frame)}
-.density-bar .fill{height:100%; background:linear-gradient(90deg,var(--teal),var(--teal-hi)); border-radius:5px; transition:width .8s ease}
-.density-bar .val{font-family:var(--mono); font-size:.75rem; color:var(--ink); min-width:40px; text-align:right}
-.anomaly-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; margin-top:16px}
-.anomaly-card{
-  background:var(--panel); border:1px solid var(--frame); border-radius:12px;
-  padding:24px 28px; transition:border-color .25s, box-shadow .25s;
-  position:relative;
-}
-.anomaly-card:hover{border-color:var(--teal); box-shadow:0 0 0 1px var(--teal), 0 12px 32px rgba(47,201,168,.1)}
-.anomaly-card .anum{font-family:var(--mono); font-size:3.5rem; font-weight:700; color:var(--teal); line-height:1; opacity:.15; margin-bottom:4px}
-.anomaly-card .atitle{font-size:1.1rem; font-weight:600; color:var(--ink); margin-bottom:8px}
-.anomaly-card .adesc{font-size:.88rem; color:var(--text); line-height:1.6}
-.pathways{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:24px; margin-top:20px}
-.pathway{
-  background:var(--panel); border:1px solid var(--frame); border-radius:14px;
-  padding:30px 32px; transition:border-color .3s, box-shadow .3s, transform .3s;
-  position:relative; overflow:hidden;
-}
-.pathway::before{
-  content:""; position:absolute; inset:0; background:linear-gradient(135deg,rgba(47,201,168,.04),transparent);
-  opacity:0; transition:opacity .3s;
-}
-.pathway:hover{border-color:var(--teal); transform:translateY(-4px); box-shadow:0 20px 44px rgba(0,0,0,.4), 0 0 0 1px var(--teal)}
-.pathway:hover::before{opacity:1}
-.pathway .pnum{font-family:var(--mono); font-size:.58rem; letter-spacing:.18em; text-transform:uppercase; color:var(--teal); margin-bottom:12px; display:block}
-.pathway h3{font-size:1.2rem; font-weight:600; color:var(--ink); margin-bottom:14px; line-height:1.3}
-.pathway p{color:var(--text); font-size:.9rem; line-height:1.7}
-.pathway .tags{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px}
-.pathway .tag{
-  font-family:var(--mono); font-size:.56rem; letter-spacing:.1em; text-transform:uppercase;
-  background:var(--panel2); border:1px solid var(--frame2); color:var(--teal);
-  padding:5px 12px; border-radius:6px;
-}
-.question-box{
-  background:linear-gradient(135deg,rgba(47,201,168,.06),rgba(242,168,53,.04));
-  border:1px solid var(--teal); border-radius:14px; padding:36px 40px;
-  margin-top:32px; text-align:center;
-}
-.question-box .qtitle{
-  font-family:var(--mono); font-size:.58rem; letter-spacing:.2em; text-transform:uppercase;
-  color:var(--teal); margin-bottom:16px; display:block;
-}
-.question-box .qtext{
-  font-size:1.3rem; font-weight:600; color:var(--ink); line-height:1.45; max-width:800px; margin:0 auto;
-}
-.question-box .qtext b{color:var(--teal-hi)}
-.question-box .qsub{
-  font-family:var(--mono); font-size:.62rem; color:var(--amber); margin-top:16px; display:block;
-}
-
-/* Algorithm reference details */
 .algo-detail{
   background:var(--panel); border:1px solid var(--frame); border-radius:10px;
   margin-bottom:12px; overflow:hidden;
@@ -204,8 +151,8 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
 @media (max-width:720px){
   header{padding:28px 24px} section{padding:28px 24px} footer{padding:20px 24px}
   .banner{flex-direction:column} .bitem{border-right:none; border-bottom:1px solid var(--frame)} .bitem:last-child{border-bottom:none}
-  .card-grid{grid-template-columns:1fr} .anomaly-grid{grid-template-columns:1fr} .pathways{grid-template-columns:1fr}
-  h1{font-size:1.5rem} .question-box .qtext{font-size:1.1rem}
+  .card-grid{grid-template-columns:1fr}
+  h1{font-size:1.5rem}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -229,10 +176,10 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
   <section id="framework">
     <h2>The Framework <span class="hint">The operational tool</span></h2>
     <div class="explain">
-      <div class="ex-title">100% Functional Infrastructure</div>
-      A complete, modular, and reproducible digital laboratory for graph coloring.
+      <div class="ex-title">Functional Infrastructure</div>
+      A modular digital laboratory for graph coloring.
       Each experiment generates a graph, runs all solvers, verifies optimality
-      via exact backtracking, and exports a self-describing JSON ready for Machine Learning.
+      via exact backtracking, and exports a self-describing JSON ready for analysis.
     </div>
 
     <div class="card-grid">
@@ -293,8 +240,8 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
           <tr><td class="algo-name">RLF</td><td>Construction</td><td>O(n²) — independent sets</td><td>—</td><td><span class="badge badge-ok">Core</span></td></tr>
           <tr><td class="algo-name">Smallest-Degree-Last</td><td>Construction</td><td>O(n+m) — degeneracy order</td><td>—</td><td><span class="badge badge-ok">Core</span></td></tr>
           <tr><td class="algo-name">Random Greedy (×10)</td><td>Stochastic</td><td>O(10·(n+m)) — multi-start</td><td>trials=10</td><td><span class="badge badge-ok">Core</span></td></tr>
-          <tr><td class="algo-name">Simulated Annealing</td><td>Metaheuristic</td><td>Stochastic — cooling</td><td>max_iter=20000 (main pipeline) / 5000 (challenging set)</td><td><span class="badge badge-info">Meta</span></td></tr>
-          <tr><td class="algo-name">Tabucol</td><td>Metaheuristic</td><td>Tabu search — conflicts</td><td>max_iter=1000 (main pipeline) / 5000 (challenging set)</td><td><span class="badge badge-info">Meta</span></td></tr>
+          <tr><td class="algo-name">Simulated Annealing</td><td>Metaheuristic</td><td>Stochastic — cooling</td><td>max_iter=20000</td><td><span class="badge badge-info">Meta</span></td></tr>
+          <tr><td class="algo-name">Tabucol</td><td>Metaheuristic</td><td>Tabu search — conflicts</td><td>max_iter=20000</td><td><span class="badge badge-info">Meta</span></td></tr>
           <tr><td class="algo-name">HEA</td><td>Hybrid (GA+TS)</td><td>Evolutionary — GPX crossover + Tabu</td><td>pop=10, gen=50, ls=1000 (main) / pop=5, gen=10, ls=100 (challenging)</td><td><span class="badge badge-info">Meta</span></td></tr>
           <tr><td class="algo-name">Backtracking (exact)</td><td>Exact</td><td>Exponential — Welsh-Powell pruning</td><td>—</td><td><span class="badge badge-warn">Exact</span></td></tr>
           <tr><td class="algo-name">CP-SAT (OR-Tools)</td><td>Exact (CP)</td><td>Constraint programming</td><td>time_limit=60s (capped at 60/k per k)</td><td><span class="badge badge-warn">Exact</span></td></tr>
@@ -360,7 +307,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
       <details class="algo-detail">
         <summary><span class="algo-sum-name">Random Greedy (×10)</span><span class="algo-sum-badge badge-ok">Stochastic</span></summary>
         <div class="algo-body">
-          <p><b>Principle:</b> Runs greedy coloring 10 times on a <b>random vertex order</b> (different seed each trial). Keeps the best result (fewest colors). On the challenging set, 5 trials are used.</p>
+          <p><b>Principle:</b> Runs greedy coloring 10 times on a <b>random vertex order</b> (different seed each trial). Keeps the best result (fewest colors).</p>
           <p><b>Complexity:</b> O(10·(n+m)) — trivially parallelizable.</p>
           <p><b>Usage:</b> Simple stochastic baseline; explores the vertex-order space.</p>
         </div>
@@ -369,7 +316,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
         <summary><span class="algo-sum-name">Simulated Annealing (SA)</span><span class="algo-sum-badge badge-info">Metaheuristic</span></summary>
         <div class="algo-body">
           <p><b>Principle:</b> Starts from an initial coloring (greedy), then explores the coloring space via <b>local moves</b> (recoloring a vertex). Accepts worsening moves with a probability that decreases according to a <b>temperature schedule</b> (cooling).</p>
-          <p><b>Key parameters:</b> max_iter=20000 (main pipeline) or 5000 (challenging set), initial temperature=10.0, cooling_rate=0.999, min_temp=0.01.</p>
+          <p><b>Key parameters:</b> max_iter=20000, initial temperature=10.0, cooling_rate=0.999, min_temp=0.01.</p>
           <p><b>Strength:</b> Can escape local optima; quality depends on the schedule and allocated time.</p>
         </div>
       </details>
@@ -377,7 +324,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
         <summary><span class="algo-sum-name">Tabucol</span><span class="algo-sum-badge badge-info">Metaheuristic</span></summary>
         <div class="algo-body">
           <p><b>Principle:</b> (Hertz & de Werra, 1987) Tabu search for k-coloring: works on <b>conflicts</b> (monochromatic edges). At each iteration, chooses the best non-tabu move (recoloring a conflicting vertex) that most reduces conflicts. Uses a <b>tabu list</b> (adaptive tenure) to forbid immediate returns.</p>
-          <p><b>Key parameters:</b> max_iter=1000 (main pipeline) or 5000 (challenging set), tenure = floor(0.6·|conflicts|) + randint(0, 9).</p>
+          <p><b>Key parameters:</b> max_iter=20000, tenure = floor(0.6·|conflicts|) + randint(0, 9).</p>
           <p><b>Strength:</b> Very effective at finding a valid k-coloring if k ≥ χ; basis of HEA.</p>
         </div>
       </details>
@@ -387,7 +334,7 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
           <p><b>Principle:</b> (Galinier & Hao, 1999) Memetic algorithm: <b>Population</b> of valid k-colorings (or with conflicts) + <b>GPX crossover</b> (Greedy Partition Crossover) that assembles the best color classes of two parents + <b>Tabucol local search</b> on each child.</p>
           <p><b>Loop:</b> Tournament selection → GPX → Tabucol (ls_iter) → Replace most similar parent if child is better.</p>
           <p><b>Parameters:</b> pop_size=10, max_generations=50, ls_iter=1000. Decreases k while a valid solution is found.</p>
-          <p><b>Strength:</b> State of the art for coloring; combines global exploration (GA) and local exploitation (Tabu).</p>
+          <p><b>Strength:</b> A reference method for coloring; combines global exploration (GA) and local exploitation (Tabu).</p>
         </div>
       </details>
       <details class="algo-detail">
@@ -417,115 +364,12 @@ footer a:hover{color:var(--teal-hi); border-color:var(--teal-hi)}
     </div>
   </section>
 
-  <section id="anomalies">
-    <h2>Experimental Findings <span class="hint">The statistical anomalies</span></h2>
-    <div class="explain">
-      <div class="ex-title">What the framework revealed on the challenging subset (37 hard instances, n=40–50)</div>
-      The massive experimentation isolated <b>structurally hard instances</b> where the gap
-      between heuristics and exact optimality is systematic, reproducible, and significant.
-    </div>
-
-    <div class="anomaly-grid">
-      <article class="anomaly-card">
-        <span class="anum">37</span>
-        <div class="atitle">Isolated "hard" instances</div>
-        <div class="adesc">37 graphs (n=40–50, p≈0.3–0.9) where backtracking is the only guaranteed optimum on 15 of them. On the other 22, <b>CP-SAT (and sometimes SAT) also reach χ</b>, but all ten heuristics (DSATUR, SA, HEA, Tabucol, …) stay at χ+1.</div>
-      </article>
-      <article class="anomaly-card">
-        <span class="anum">+1</span>
-        <div class="atitle">Exact one-color gap</div>
-        <div class="adesc">On these 37 instances, <b>the gap is systematically 1</b>: χ_heuristic = χ_optimal + 1. No approximate solver crosses this barrier, suggesting a common structural property (hidden clique, critical core, etc.).</div>
-      </article>
-      <article class="anomaly-card">
-        <span class="anum">p≈0.6</span>
-        <div class="atitle">Critical density phase</div>
-        <div class="adesc">Most hard instances concentrate around p≈0.6 (G(n,p) with n=40–50). Difficulty explodes in a narrow density window; outside it, heuristics usually find the optimum. This <b>phase transition</b> coincides with the expected satisfiability threshold for k-colorability.</div>
-      </article>
-      <article class="anomaly-card">
-        <span class="anum">⚡</span>
-        <div class="atitle">Metaheuristic instability</div>
-        <div class="adesc">SA, Tabucol, HEA: <b>highly variable</b> performance depending on density. On hard instances, they converge to local optima (χ+1) without an effective escape mechanism. The fitness landscape shows deep valleys with no gradient toward the global optimum.</div>
-      </article>
-      <article class="anomaly-card">
-        <span class="anum">15/37</span>
-        <div class="atitle">Backtracking-only optimum</div>
-        <div class="adesc">On 15 of the 37 instances, <b>only backtracking</b> reaches χ. CP-SAT reaches χ on 22/37 and SAT on 5/37 — so the difficulty is not purely computational, but exact solvers still dominate the heuristics, which never cross χ+1.</div>
-      </article>
-      <article class="anomaly-card">
-        <span class="anum">χ≈8</span>
-        <div class="atitle">Moderate chromatic number</div>
-        <div class="adesc">These graphs are not trivial but not extreme either (χ≈8 for n=40–50). The <b>gap ω ≤ χ ≤ Δ+1</b> is tight: the structure blocks just above the clique bound, which is where heuristics get stuck.</div>
-      </article>
-    </div>
-
-    <div class="explain" style="margin-top:24px; border-color:var(--teal); background:rgba(47,201,168,.04)">
-      <div class="ex-title">Empirical proof — Excerpt from a typical hard instance (000063.json, n=50, p=0.6)</div>
-      <p style="font-family:var(--mono); font-size:.75rem; color:var(--text); background:var(--panel2); border:1px solid var(--frame); border-radius:8px; padding:16px; overflow-x:auto; margin-top:10px;">
-χ = 11 (source: backtracking / CP-SAT)<br>
-Greedy: 16 colors  (+5) ✗<br>
-Welsh-Powell: 14 colors  (+3) ✗<br>
-DSATUR: 13 colors  (+2) ✗<br>
-IDO: 13 colors  (+2) ✗<br>
-RLF: 13 colors  (+2) ✗<br>
-Smallest-Degree-Last: 14 colors  (+3) ✗<br>
-Random Greedy: 14 colors  (+3) ✗<br>
-SA: 12 colors  (+1) ✗<br>
-HEA: 12 colors  (+1) ✗<br>
-Tabucol: 13 colors  (+2) ✗<br>
-SAT: 16 colors  (+5) ✗<br>
-<strong style="color:var(--ok)">CP-SAT: 11 colors  (+0) ✓</strong><br>
-<strong style="color:var(--ok)">Backtracking: 11 colors  (+0) ✓</strong><br>
-<br>
-<em>On the 37 hard instances: the ten heuristics stay at χ+1; only exact solvers (backtracking, and CP-SAT on 22/37) reach χ. SA/HEA fail under the challenging-set parameters (SA max_iter=5000, HEA pop=5/gen=10/ls=100).</em>
-      </p>
-    </div>
-  </section>
-
   <section id="toolkit">
     <h2>Laboratory Toolkit <span class="hint">How to use the lab</span></h2>
     <div class="explain">
       <div class="ex-title">From raw graphs to analysis-ready data</div>
       The lab is a reproducible pipeline. Each step reads/writes self-describing JSON
       so that everything can be re-run, compared, and extracted without a database.
-    </div>
-
-    <div class="card-grid">
-      <article class="card">
-        <span class="icon">🧪</span>
-        <span class="clabel">main.py — Generate</span>
-        <span class="cval">Run &amp; export</span>
-        <span class="csub">Generates graphs, runs all solvers,<br>verifies χ via backtracking, exports<br>sequential JSON (000001.json…)<br>into results/json/&lt;type&gt;/</span>
-      </article>
-      <article class="card">
-        <span class="icon">🔁</span>
-        <span class="clabel">compare.py — Re-run</span>
-        <span class="cval">Refresh results</span>
-        <span class="csub">Re-runs every solver on existing<br>JSON files, overwrites results,<br>groups files into &lt;n&gt;_vertices/<br>folders (main pipeline &amp; challenging)</span>
-      </article>
-      <article class="card">
-        <span class="icon">📊</span>
-        <span class="clabel">html_stats.py — Visualize</span>
-        <span class="cval">Interactive report</span>
-        <span class="csub">Scans JSON in its folder, builds<br>stats.html: optimality rates, per-file<br>detail, click-to-draw colored graphs<br>(SVG, no extra library)</span>
-      </article>
-      <article class="card">
-        <span class="icon">📝</span>
-        <span class="clabel">json_stats.py — Text stats</span>
-        <span class="cval">Plain report</span>
-        <span class="csub">Same statistics as text →<br>json_stats_results.txt, plus the<br>“first ten” heuristic group summary</span>
-      </article>
-      <article class="card">
-        <span class="icon">🗂️</span>
-        <span class="clabel">full_report.py — Aggregate</span>
-        <span class="cval">Merge reports</span>
-        <span class="csub">Copies each &lt;n&gt;_vertices/stats.html<br>into full_report/ prefixed by size<br>(30_stats.html, 50_stats.html…)</span>
-      </article>
-      <article class="card">
-        <span class="icon">🤖</span>
-        <span class="clabel">load_data() — ML</span>
-        <span class="cval">pandas DataFrame</span>
-        <span class="csub">Aggregates all JSON → long/wide<br>DataFrame: features (X), labels<br>(best_algorithm, optimal, gap_to_χ)</span>
-      </article>
     </div>
 
     <div class="explain" style="margin-top:28px; border-color:var(--teal); background:rgba(47,201,168,.04)">
@@ -548,9 +392,12 @@ SAT: 16 colors  (+5) ✗<br>
       <p style="font-family:var(--mono); font-size:.72rem; color:var(--text); background:var(--panel2); border:1px solid var(--frame); border-radius:8px; padding:16px; overflow-x:auto; margin-top:10px; line-height:1.9;">
 # 1. Generate a corpus (writes JSON into results/json/&lt;type&gt;/)<br>
 python3 graph/exact_coloring/experiment/main.py<br>
+#    (set operate_on_existing_json=1 to re-process existing JSON instead —<br>
+#     results are then written to results/json/&lt;type&gt;/update/, originals kept)<br>
 <br>
-# 2. Re-run solvers &amp; group files by size<br>
-python3 graph/exact_coloring/experiment/results/json/random/compare.py<br>
+# 2. Refresh solvers on existing JSON (JSON re-run mode)<br>
+cd graph/exact_coloring/experiment &amp;&amp; python3 main.py   # operate_on_existing_json=1<br>
+#    writes processed files to results/json/&lt;type&gt;/update/<br>
 <br>
 # 3. In each size folder, build the interactive + text reports<br>
 cp html_stats.py json_stats.py 60_vertices/<br>
@@ -561,98 +408,6 @@ python3 graph/exact_coloring/experiment/results/json/random/full_report.py<br>
 <br>
 # 5. Open stats.html → click ⚡ Union to compare / extract instances
       </p>
-    </div>
-  </section>
-
-  <section id="highlights">
-    <h2>Why this lab stands out <span class="hint">In one glance</span></h2>
-    <div class="card-grid">
-      <article class="card">
-        <span class="icon">🎯</span>
-        <span class="clabel">11 graph families</span>
-        <span class="cval">Beyond random</span>
-        <span class="csub">Erdős–Rényi, bipartite, complete,<br>multipartite, tree, regular, cycle,<br>wheel, 2D grid, hypercube, Mycielski<br>(triangle-free, χ known)</span>
-      </article>
-      <article class="card">
-        <span class="icon">🔒</span>
-        <span class="clabel">Reproducible by seed</span>
-        <span class="cval">One knob</span>
-        <span class="csub">Fix SEED in main.py → the whole<br>corpus is regenerated identically<br>(graph = SEED + run index)</span>
-      </article>
-      <article class="card">
-        <span class="icon">📦</span>
-        <span class="clabel">Self-describing JSON</span>
-        <span class="cval">Zero glue code</span>
-        <span class="csub">Each instance packs the matrix,<br>features, χ, per-solver results and<br>labels — ready to load as-is</span>
-      </article>
-      <article class="card">
-        <span class="icon">⚖️</span>
-        <span class="clabel">Exact vs heuristic</span>
-        <span class="cval">Proven ground truth</span>
-        <span class="csub">Backtracking / CP-SAT / SAT give a<br>provable χ; heuristics are measured<br>against it via gap_to_χ</span>
-      </article>
-    </div>
-  </section>
-
-  <section id="crossroads">
-    <h2>The Scientific Crossroads <span class="hint">The orientation request</span></h2>
-    <div class="explain">
-      <div class="ex-title">Doctoral research problem</div>
-      I have a <b>finished digital laboratory</b> (13 solvers, generators, exact benchmarks, ML-ready corpus)
-      and <b>revealing experimental data</b> (isolated hard instances, critical phase, metaheuristic instability).
-      <br><br>
-      The question is no longer technical — <b>everything works</b>. The question is <b>scientific</b>:
-      which direction turns these anomalies into an <b>original doctoral contribution</b>?
-    </div>
-
-    <div class="pathways">
-      <article class="pathway">
-        <span class="pnum">Path 1</span>
-        <h3>New hybrid algorithm targeting hard instances</h3>
-        <p>Design a solver <b>specialized for the p≈0.6 zone</b> that crosses the χ+1 barrier.
-        Hybridize: structure-guided local search (critical core detection, hidden cliques)
-        + adaptive escape mechanism (targeted perturbation, component recoloring).</p>
-        <div class="tags">
-          <span class="tag">Algorithm Design</span>
-          <span class="tag">Hybrid Metaheuristics</span>
-          <span class="tag">Targeted Hard Instances</span>
-          <span class="tag">Structural Exploitation</span>
-        </div>
-      </article>
-      <article class="pathway">
-        <span class="pnum">Path 2</span>
-        <h3>Landscape analysis — Instance Space Analysis</h3>
-        <p>Understand <b>structurally why</b> these 37 instances block all heuristics.
-        Map the instance space (features → difficulty) via <b>Instance Space Analysis</b>
-        (Mersmann et al., EvoCOP): identify the <b>hardness regions</b>, the <b>discriminating features</b>
-        (girth, ω-gap, modularity, k-cores), and model the χ/χ+1 frontier.</p>
-        <div class="tags">
-          <span class="tag">Instance Space Analysis</span>
-          <span class="tag">Landscape Analysis</span>
-          <span class="tag">Explainable Hardness</span>
-          <span class="tag">Feature Engineering</span>
-        </div>
-      </article>
-      <article class="pathway">
-        <span class="pnum">Path 3</span>
-        <h3>Algorithm Selection with symbolic (White-Box) rules</h3>
-        <p>Instead of opaque ML (Random Forest, NN), learn <b>interpretable decision rules</b>
-        (bounded decision trees, rule sets, programming by optimization) to predict
-        <b>the best solver</b> from features. Contribution: <b>explainable selection</b> + theoretical
-        guarantees (regret bound) + zero-dependency deployment.</p>
-        <div class="tags">
-          <span class="tag">Algorithm Selection</span>
-          <span class="tag">White-Box ML</span>
-          <span class="tag">Interpretable AI</span>
-          <span class="tag">Portfolio Solvers</span>
-        </div>
-      </article>
-    </div>
-
-    <div class="question-box">
-      <span class="qtitle">Question to the researcher</span>
-      <p class="qtext"><b>Which direction seems to you the most promising and relevant for a doctoral-level scientific contribution?</b></p>
-      <span class="qsub">Your opinion guides the next steps of this work — Thank you in advance for your insights.</span>
     </div>
   </section>
 

@@ -24,6 +24,7 @@ class JsonStatsAnalyzer:
             "Greedy", "Welsh-Powell", "DSATUR", "IDO", "RLF",
             "Smallest-degree-last", "Random greedy (×10)", 
             "Simulated Annealing", "Hybrid Evolutionary", "Tabucol",
+            "CP-SAT (OR-Tools)", "SAT",
             "Backtracking (exact)"
         ]
         
@@ -38,6 +39,8 @@ class JsonStatsAnalyzer:
             "Simulated Annealing": "sa",
             "Hybrid Evolutionary": "hea",
             "Tabucol": "tabu",
+            "CP-SAT (OR-Tools)": "cpsat",
+            "SAT": "sat",
             "Backtracking (exact)": "backtracking"
         }
         

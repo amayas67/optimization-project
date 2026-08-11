@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "run_id": "000033",
-  "generated_at": "2026-08-04T11:30:20.159514",
+  "generated_at": "2026-08-10T22:35:46.716423",
   "seed": null,
   "instance": {
     "type": "random",
@@ -1452,6 +1452,22 @@
         9,
         10
       ]
+    },
+    {
+      "algorithm": "cpsat",
+      "n_colors": -1,
+      "gap_to_chi": null,
+      "optimal": false,
+      "time_ms": 30031.853,
+      "solution": []
+    },
+    {
+      "algorithm": "sat",
+      "n_colors": -1,
+      "gap_to_chi": null,
+      "optimal": false,
+      "time_ms": 35495.234,
+      "solution": []
     }
   ],
   "labels": {
